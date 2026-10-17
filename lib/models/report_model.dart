@@ -23,6 +23,10 @@ class ReportModel {
   final String? bullyName;
   final String? bullyGradeSection;
   final List<String>? witnesses;
+  final String reportSource; // 'Parent-Reported', 'Adviser-Observed'
+  final String? reporterId;
+  final String? reporterName;
+  final String urgencyLevel; // 'Low', 'Moderate', 'High'
 
   ReportModel({
     required this.id,
@@ -49,6 +53,10 @@ class ReportModel {
     this.bullyName,
     this.bullyGradeSection,
     this.witnesses,
+    this.reportSource = 'Parent-Reported',
+    this.reporterId,
+    this.reporterName,
+    this.urgencyLevel = 'Moderate',
   });
 
   Map<String, dynamic> toJson() {
@@ -77,6 +85,10 @@ class ReportModel {
       'bully_name': bullyName,
       'bully_grade_section': bullyGradeSection,
       'witnesses': witnesses,
+      'report_source': reportSource,
+      'reporter_id': reporterId,
+      'reporter_name': reporterName,
+      'urgency_level': urgencyLevel,
     };
   }
 
@@ -106,6 +118,10 @@ class ReportModel {
       bullyName: json['bully_name'] ?? json['bullyName'],
       bullyGradeSection: json['bully_grade_section'] ?? json['bullyGradeSection'],
       witnesses: json['witnesses'] != null ? List<String>.from(json['witnesses']) : null,
+      reportSource: json['report_source'] ?? json['reportSource'] ?? 'Parent-Reported',
+      reporterId: json['reporter_id']?.toString() ?? json['reporterId']?.toString(),
+      reporterName: json['reporter_name'] ?? json['reporterName'],
+      urgencyLevel: json['urgency_level'] ?? json['urgencyLevel'] ?? 'Moderate',
     );
   }
 
@@ -121,6 +137,10 @@ class ReportModel {
     String? bullyName,
     String? bullyGradeSection,
     List<String>? witnesses,
+    String? reportSource,
+    String? reporterId,
+    String? reporterName,
+    String? urgencyLevel,
   }) {
     return ReportModel(
       id: id,
@@ -147,6 +167,10 @@ class ReportModel {
       bullyName: bullyName ?? this.bullyName,
       bullyGradeSection: bullyGradeSection ?? this.bullyGradeSection,
       witnesses: witnesses ?? this.witnesses,
+      reportSource: reportSource ?? this.reportSource,
+      reporterId: reporterId ?? this.reporterId,
+      reporterName: reporterName ?? this.reporterName,
+      urgencyLevel: urgencyLevel ?? this.urgencyLevel,
     );
   }
 }

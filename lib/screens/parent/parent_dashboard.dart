@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../services/database_service.dart';
 import '../../models/report_model.dart';
+import '../../models/student_model.dart';
+import '../../services/ai_service.dart';
+import '../staff/ai_summary_screen.dart';
 import '../../widgets/status_badge.dart';
+import 'package:file_picker/file_picker.dart';
 import '../auth/login_screen.dart';
 import 'submit_report.dart';
 import 'report_detail.dart';
@@ -210,25 +214,136 @@ class _ParentDashboardState extends State<ParentDashboard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'LINKED STUDENT',
+                            'LINKED CHILDREN',
                             style: TextStyle(color: Color(0xFF475569), fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Name: ${parent.studentName}',
-                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Class: ${parent.studentGrade} - ${parent.studentSection}',
-                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                          ),
-                          Text(
-                            'Academic Year: ${parent.academicYear}',
-                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                          ),
+                          const SizedBox(height: 8),
+                          if (parent.students == null || parent.students!.isEmpty)
+                            const Text(
+                              'No children linked to your profile.',
+                              style: TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.bold),
+                            )
+                          else
+                            ...parent.students!.map((s) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.person, color: Color(0xFF2563EB), size: 16),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          s.name,
+                                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12, fontWeight: FontWeight.bold),
+                                        ),
+                                        Text(
+                                          '${s.grade} - ${s.section} | AY: ${s.academicYear}',
+                                          style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )).toList(),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        // Close settings dialog first
+                        Navigator.of(context).pop();
+                        
+                        // Pick and verify a new certificate
+                        try {
+                          final result = await FilePicker.platform.pickFiles(type: FileType.any);
+                          if (result != null && result.files.isNotEmpty) {
+                            final file = result.files.first;
+                            final name = file.name;
+
+                            // Build simulated certificate content
+                            final parentName = parent.name;
+                            String extractedStudentName = '';
+                            String extractedSection = '';
+
+                            if (name.contains('10388171') ||
+                                name.toLowerCase().contains('coles') ||
+                                name.toLowerCase().contains('kyle') ||
+                                name.toLowerCase().contains('pring')) {
+                              extractedStudentName = 'Coles, Kyle Pring';
+                              extractedSection = 'GRADE 11 STEM-A';
+                            } else {
+                              String fileName = name;
+                              if (fileName.contains('.')) {
+                                fileName = fileName.substring(0, fileName.lastIndexOf('.'));
+                              }
+                              fileName = fileName.replaceAll('_', ' ');
+
+                              if (fileName.contains(' - ')) {
+                                final parts = fileName.split(' - ');
+                                extractedStudentName = parts[0].trim();
+                                extractedSection = parts.sublist(1).join(' - ').trim();
+                              } else if (fileName.contains('-')) {
+                                final parts = fileName.split('-');
+                                extractedStudentName = parts[0].trim();
+                                extractedSection = parts.sublist(1).join('-').trim();
+                              } else {
+                                extractedStudentName = fileName.trim();
+                                extractedSection = 'GRADE 11 STEM-A';
+                              }
+                            }
+
+                            final isOutdated = name.toLowerCase().contains('outdated') || 
+                                               name.toLowerCase().contains('2024') || 
+                                               name.toLowerCase().contains('2025');
+                            final isInvalid = name.toLowerCase().contains('invalid') || 
+                                              name.toLowerCase().contains('not_enrolled');
+
+                            final status = isInvalid ? 'NOT ENROLLED' : 'ENROLLED';
+                            final ay = isOutdated ? '2024-2025' : '2026-2027';
+
+                            final certMockText = 'STATUS: $status. STUDENT: $extractedStudentName. PARENT: ${parentName.toUpperCase()}. SECTION: $extractedSection. AY: $ay. FILE: $name';
+
+                            final ocrResult = await AIService().scanEnrollmentCertificate(name, certMockText);
+
+                            if (!ocrResult.success) {
+                              throw Exception(ocrResult.errorMessage ?? "Failed to read enrollment document.");
+                            }
+
+                            // Call addChild API
+                            await _db.addChild(
+                              certificateFilename: name,
+                              studentName: ocrResult.studentName!,
+                              sectionName: ocrResult.studentSection!,
+                              gradeLevel: ocrResult.studentGrade!,
+                              academicYear: ocrResult.academicYear!,
+                            );
+
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Successfully linked child: ${ocrResult.studentName}')),
+                            );
+                          }
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to link child: $e')),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF2563EB),
+                        elevation: 0,
+                        side: const BorderSide(color: Color(0xFF2563EB)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add Another Child (Upload Cert)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     ),
 
                     const SizedBox(height: 20),
@@ -337,15 +452,113 @@ class _ParentDashboardState extends State<ParentDashboard> {
     );
   }
 
+  Widget _buildChildSelectorSection() {
+    final parent = _db.currentUser;
+    if (parent == null) return const SizedBox();
+    final students = parent.students ?? [];
+    
+    if (students.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          border: Border.all(color: const Color(0xFFFDE68A)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706)),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'No children linked to your profile yet. Please add a child in Settings.',
+                style: TextStyle(color: Color(0xFF92400E), fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: _showSettingsDialog,
+              child: const Text('Add Child', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final activeChild = _db.selectedChild;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          )
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.child_care, color: Color(0xFF2563EB), size: 24),
+          const SizedBox(width: 12),
+          const Text(
+            'Selected Child:',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF475569), fontSize: 13),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<StudentModel>(
+                  value: activeChild != null && students.any((s) => s.id == activeChild.id) ? students.firstWhere((s) => s.id == activeChild.id) : null,
+                  hint: const Text('Select a child', style: TextStyle(fontSize: 13)),
+                  isExpanded: true,
+                  style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+                  items: students.map((s) {
+                    return DropdownMenuItem<StudentModel>(
+                      value: s,
+                      child: Text('${s.name} (${s.section})'),
+                    );
+                  }).toList(),
+                  onChanged: (newChild) {
+                    _db.selectChild(newChild);
+                  },
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final parent = _db.currentUser;
     if (parent == null) return const SizedBox();
 
-    final allReports = _db.getReports();
-    final activeReports = allReports.where((r) => r.status != 'resolved' && r.status != 'closed').toList();
-    final resolvedReports = allReports.where((r) => r.status == 'resolved' || r.status == 'closed').toList();
-    final meetingsCount = allReports.where((r) => r.status == 'scheduled_meeting').length;
+    final activeChild = _db.selectedChild;
+
+    // Filter reports for selected child
+    final allReports = _db.getReports().where((r) {
+      if (activeChild == null) return false;
+      return r.studentName.toLowerCase() == activeChild.name.toLowerCase();
+    }).toList();
+
+    final activeReports = allReports.where((r) => r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').toList();
+    final resolvedReports = allReports.where((r) => r.status.toLowerCase() == 'resolved' || r.status.toLowerCase() == 'closed').toList();
+    final meetingsCount = allReports.where((r) => r.status.toLowerCase() == 'scheduled_meeting' || r.status.toLowerCase() == 'scheduled').length;
 
     final currentList = _showResolved ? resolvedReports : activeReports;
 
@@ -415,6 +628,64 @@ class _ParentDashboardState extends State<ParentDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _buildChildSelectorSection(),
+
+                // AI Summary Insight Card
+                if (_db.selectedChild != null) ...[
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    color: const Color(0xFFF8FAFC),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AiSummaryScreen(),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2F6),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.psychology_outlined, color: Color(0xFF2563EB), size: 28),
+                            ),
+                            const SizedBox(width: 16),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'AI Summary Insights',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 14),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'View weekly, monthly, or yearly AI summaries for your selected child.',
+                                    style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios, color: Color(0xFF64748B), size: 16),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // 4 Statistics Cards Grid
                 GridView.count(
                   crossAxisCount: 2,

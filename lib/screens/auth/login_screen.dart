@@ -39,8 +39,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final user = await _db.login(
-        _emailController.text,
-        _passwordController.text,
+        _emailController.text.trim().toLowerCase(),
+        _passwordController.text.trim(),
       );
       _navigateToDashboard(user);
     } catch (e) {

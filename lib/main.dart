@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth/login_screen.dart';
 import 'services/database_service.dart';
 
-void main() {
+void main() async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://pxwpdtnqkucgkrpumctg.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4d3BkdG5xa3VjZ2tycHVtY3RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTg2NjYsImV4cCI6MjEwNzczNDY2Nn0.XN6-y1ZFlaoQaUHkVjaz4IKT5XuvlP8jRBIU8sDCX-Q',
+  );
+
   runApp(const HayagSyncApp());
 }
 

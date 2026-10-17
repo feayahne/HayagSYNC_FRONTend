@@ -436,6 +436,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
         bullyName: _bullyNameController.text.trim().isEmpty ? null : _bullyNameController.text.trim(),
         bullyGradeSection: _bullyGradeSectionController.text.trim().isEmpty ? null : _bullyGradeSectionController.text.trim(),
         witnesses: witnessesList.isEmpty ? null : witnessesList,
+        studentId: _db.selectedChild?.id,
       );
 
       if (!mounted) return;
@@ -504,10 +505,10 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                         Row(
                           children: [
                             Expanded(
-                              child: _buildReadOnlyField('Student Name', parent.studentName ?? 'N/A'),
+                              child: _buildReadOnlyField('Student Name', _db.selectedChild?.name ?? 'N/A'),
                             ),
                             Expanded(
-                              child: _buildReadOnlyField('Section & Grade', parent.studentSection ?? 'N/A'),
+                              child: _buildReadOnlyField('Section & Grade', _db.selectedChild != null ? '${_db.selectedChild!.grade} - ${_db.selectedChild!.section}' : 'N/A'),
                             ),
                           ],
                         ),

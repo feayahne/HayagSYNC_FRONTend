@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import '../../services/database_service.dart';
 import '../../models/user_model.dart';
 import '../../models/report_model.dart';
-import '../../widgets/glass_panel.dart';
 import '../../widgets/status_badge.dart';
 import '../auth/login_screen.dart';
 import 'staff_report_detail.dart';
+import 'ai_summary_screen.dart';
+import 'duplicate_manager_screen.dart';
+import 'adviser_submit_report.dart';
 
 class StaffDashboard extends StatefulWidget {
   const StaffDashboard({super.key});
@@ -69,7 +71,7 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
     final pendingCount = reports.where((r) => r.status.toLowerCase() == 'pending').length;
     final reviewCount = reports.where((r) => r.status.toLowerCase() == 'under review' || r.status.toLowerCase() == 'under_review').length;
     final scheduledCount = reports.where((r) => r.status.toLowerCase() == 'scheduled' || r.status.toLowerCase() == 'scheduled_meeting').length;
-    final escalatedCount = reports.where((r) => r.status.toLowerCase() == 'escalated' || r.status.toLowerCase() == 'escalated to ministrong').length;
+    final escalatedCount = reports.where((r) => r.status.toLowerCase() == 'escalated' || r.status.toLowerCase() == 'escalated to ministrong' || r.status.toLowerCase() == 'escalated to principal').length;
     final resolvedCount = reports.where((r) => r.status.toLowerCase() == 'resolved' || r.status.toLowerCase() == 'closed').length;
 
     // Apply Status Filter
@@ -81,7 +83,7 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
       } else if (_selectedStatusFilter == 'scheduled_meeting') {
         reports = reports.where((r) => r.status.toLowerCase() == 'scheduled' || r.status.toLowerCase() == 'scheduled_meeting').toList();
       } else if (_selectedStatusFilter == 'escalated') {
-        reports = reports.where((r) => r.status.toLowerCase() == 'escalated' || r.status.toLowerCase() == 'escalated to ministrong').toList();
+        reports = reports.where((r) => r.status.toLowerCase() == 'escalated' || r.status.toLowerCase() == 'escalated to ministrong' || r.status.toLowerCase() == 'escalated to principal').toList();
       } else {
         reports = reports.where((r) => r.status.toLowerCase() == _selectedStatusFilter).toList();
       }
@@ -157,6 +159,25 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.psychology_outlined),
+            tooltip: 'AI Summaries',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AiSummaryScreen()),
+              );
+            },
+          ),
+          if (staff.role == UserRole.principal || staff.role == UserRole.osd)
+            IconButton(
+              icon: const Icon(Icons.group_off_outlined),
+              tooltip: 'Duplicate Accounts Manager',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DuplicateManagerScreen()),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.logout_outlined),
             tooltip: 'Sign Out',
@@ -250,6 +271,25 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                               ],
                             ),
                           ),
+                          if (staff.role == UserRole.adviser) ...[
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const AdviserSubmitReportScreen()),
+                                );
+                              },
+                              icon: const Icon(Icons.add_alert_outlined, size: 18),
+                              label: const Text('Create Incident Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFF0F766E),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 2,
+                              ),
+                            ),
+                          ],
                           if (staff.role == UserRole.osd || staff.role == UserRole.ministrong_tagasubaybay) ...[
                             const SizedBox(width: 16),
                             Container(

@@ -19,8 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String? _selectedCertificateMock; // Filename chosen
-  String? _certificateContentMock; // Simulated text contents
+  final List<Map<String, String>> _verifiedChildren = [];
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
@@ -45,72 +44,89 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         final name = file.name;
+        
         setState(() {
-          _selectedCertificateMock = name;
-          _certificateContentMock = null;
+          _isLoading = true;
           _errorMessage = null;
         });
+
+        // Run OCR verification immediately
+        final parentName = _parentNameController.text.trim().isEmpty ? 'PARENT' : _parentNameController.text.trim();
+        String extractedStudentName = '';
+        String extractedSection = '';
+
+        if (name.contains('10388171') ||
+            name.toLowerCase().contains('coles') ||
+            name.toLowerCase().contains('kyle') ||
+            name.toLowerCase().contains('pring')) {
+          extractedStudentName = 'Coles, Kyle Pring';
+          extractedSection = 'GRADE 11 STEM-A';
+        } else {
+          String fileName = name;
+          if (fileName.contains('.')) {
+            fileName = fileName.substring(0, fileName.lastIndexOf('.'));
+          }
+          fileName = fileName.replaceAll('_', ' ');
+
+          if (fileName.contains(' - ')) {
+            final parts = fileName.split(' - ');
+            extractedStudentName = parts[0].trim();
+            extractedSection = parts.sublist(1).join(' - ').trim();
+          } else if (fileName.contains('-')) {
+            final parts = fileName.split('-');
+            extractedStudentName = parts[0].trim();
+            extractedSection = parts.sublist(1).join('-').trim();
+          } else {
+            extractedStudentName = fileName.trim();
+            extractedSection = 'GRADE 11 STEM-A';
+          }
+        }
+
+        final isOutdated = name.toLowerCase().contains('outdated') || 
+                           name.toLowerCase().contains('2024') || 
+                           name.toLowerCase().contains('2025');
+        final isInvalid = name.toLowerCase().contains('invalid') || 
+                          name.toLowerCase().contains('not_enrolled');
+        
+        final status = isInvalid ? 'NOT ENROLLED' : 'ENROLLED';
+        final ay = isOutdated ? '2024-2025' : '2026-2027';
+        
+        final certMockText = 'STATUS: $status. STUDENT: $extractedStudentName. PARENT: ${parentName.toUpperCase()}. SECTION: $extractedSection. AY: $ay. FILE: $name';
+
+        final ocrResult = await _ai.scanEnrollmentCertificate(name, certMockText);
+
+        if (!ocrResult.success) {
+          throw Exception(ocrResult.errorMessage ?? "Failed to verify enrollment document.");
+        }
+
+        // Add to verified children list
+        setState(() {
+          _verifiedChildren.add({
+            'studentName': ocrResult.studentName!,
+            'sectionName': ocrResult.studentSection!,
+            'gradeLevel': ocrResult.studentGrade!,
+            'academicYear': ocrResult.academicYear!,
+            'certificateFilename': name,
+            'certificateContentMock': certMockText,
+          });
+          _isLoading = false;
+        });
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verified child: ${ocrResult.studentName} (${ocrResult.studentSection})')),
+        );
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to pick file: $e';
+        _isLoading = false;
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
       });
     }
   }
 
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCertificateMock == null) {
-      setState(() {
-        _errorMessage = "Please upload/select an Enrollment Certificate to verify enrollment.";
-      });
-      return;
-    }
-
-    final parentName = _parentNameController.text.trim();
-
-    String extractedStudentName = '';
-    String extractedSection = '';
-
-    // Generate certificate content dynamically based on parent name if a custom file is uploaded
-    if (_selectedCertificateMock!.contains('10388171') ||
-        _selectedCertificateMock!.toLowerCase().contains('coles') ||
-        _selectedCertificateMock!.toLowerCase().contains('kyle') ||
-        _selectedCertificateMock!.toLowerCase().contains('pring')) {
-      extractedStudentName = 'Coles, Kyle Pring';
-      extractedSection = 'GRADE 11 STEM-A';
-    } else {
-      // Parse details directly from filename
-      String fileName = _selectedCertificateMock!;
-      if (fileName.contains('.')) {
-        fileName = fileName.substring(0, fileName.lastIndexOf('.'));
-      }
-      fileName = fileName.replaceAll('_', ' ');
-
-      if (fileName.contains(' - ')) {
-        final parts = fileName.split(' - ');
-        extractedStudentName = parts[0].trim();
-        extractedSection = parts.sublist(1).join(' - ').trim();
-      } else if (fileName.contains('-')) {
-        final parts = fileName.split('-');
-        extractedStudentName = parts[0].trim();
-        extractedSection = parts.sublist(1).join('-').trim();
-      } else {
-        extractedStudentName = fileName.trim();
-        extractedSection = 'GRADE 11 STEM-A';
-      }
-    }
-
-    final isOutdated = _selectedCertificateMock!.toLowerCase().contains('outdated') || 
-                       _selectedCertificateMock!.toLowerCase().contains('2024') || 
-                       _selectedCertificateMock!.toLowerCase().contains('2025');
-    final isInvalid = _selectedCertificateMock!.toLowerCase().contains('invalid') || 
-                      _selectedCertificateMock!.toLowerCase().contains('not_enrolled');
-    
-    final status = isInvalid ? 'NOT ENROLLED' : 'ENROLLED';
-    final ay = isOutdated ? '2024-2025' : '2026-2027';
-    
-    _certificateContentMock = 'STATUS: $status. STUDENT: $extractedStudentName. PARENT: ${parentName.toUpperCase()}. SECTION: $extractedSection. AY: $ay. FILE: $_selectedCertificateMock';
 
     setState(() {
       _isLoading = true;
@@ -119,32 +135,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      // 1. Run Simulated OCR scan on document
-      final ocrResult = await _ai.scanEnrollmentCertificate(
-        _selectedCertificateMock!,
-        _certificateContentMock,
-      );
+      UserModel newParent;
+      if (_verifiedChildren.isEmpty) {
+        newParent = await _db.registerParent(
+          name: _parentNameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          studentName: '',
+          sectionName: '',
+          gradeLevel: '',
+          academicYear: '',
+          certificateFilename: '',
+        );
+      } else {
+        final first = _verifiedChildren.first;
+        newParent = await _db.registerParent(
+          name: _parentNameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          studentName: first['studentName']!,
+          sectionName: first['sectionName']!,
+          gradeLevel: first['gradeLevel']!,
+          academicYear: first['academicYear']!,
+          certificateFilename: first['certificateFilename']!,
+        );
 
-      if (!ocrResult.success) {
-        throw Exception(ocrResult.errorMessage ?? "Failed to read enrollment document.");
+        // Add additional children
+        for (int i = 1; i < _verifiedChildren.length; i++) {
+          final child = _verifiedChildren[i];
+          await _db.addChild(
+            certificateFilename: child['certificateFilename']!,
+            studentName: child['studentName']!,
+            sectionName: child['sectionName']!,
+            gradeLevel: child['gradeLevel']!,
+            academicYear: child['academicYear']!,
+          );
+        }
       }
 
-      // 2. OCR Successful - Register parent
-      final newParent = await _db.registerParent(
-        name: _parentNameController.text,
-        email: _emailController.text,
-        password: _passwordController.text,
-        studentName: ocrResult.studentName!,
-        sectionName: ocrResult.studentSection!,
-        gradeLevel: ocrResult.studentGrade!,
-        academicYear: ocrResult.academicYear!,
-        certificateFilename: _selectedCertificateMock!,
-      );
-
-      // Save terms accepted status as user already agreed via sign-up checkbox
       await TermsStorage.accept(newParent.id);
 
-      // Show success popup with extracted details
       if (!mounted) return;
       _showVerificationSuccessDialog(newParent);
 
@@ -393,51 +423,58 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                           const SizedBox(height: 24),
 
-                          // Certificate Upload Header
-                          const Text(
-                            'Upload Student Enrollment Certificate',
-                            style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-
-                          // Certificate Picker Box
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: _selectedCertificateMock != null ? const Color(0xFF16A34A) : const Color(0xFFE2E8F0),
-                                width: 1.5,
-                              ),
+                          // Verified Children List
+                          if (_verifiedChildren.isNotEmpty) ...[
+                            const Text(
+                              'Verified Children',
+                              style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold),
                             ),
-                            child: Column(
-                              children: [
-                                if (_selectedCertificateMock == null) ...[
-                                  const Icon(Icons.cloud_upload_outlined, size: 48, color: Color(0xFF94A3B8)),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'Please choose a student enrollment certificate image to verify enrollment status.',
-                                    style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                                    textAlign: TextAlign.center,
+                            const SizedBox(height: 8),
+                            ..._verifiedChildren.map((child) => Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(child['studentName']!, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 13)),
+                                        Text('${child['gradeLevel']} - ${child['sectionName']}', style: const TextStyle(color: Color(0xFF475569), fontSize: 11)),
+                                      ],
+                                    ),
                                   ),
-                                ] else ...[
-                                  const Icon(Icons.description_outlined, size: 48, color: Color(0xFF16A34A)),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    _selectedCertificateMock!,
-                                    style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Image loaded. Click Register to scan document.',
-                                    style: TextStyle(color: Color(0xFF16A34A), fontSize: 11, fontWeight: FontWeight.w500),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 20),
+                                    onPressed: () {
+                                      setState(() {
+                                        _verifiedChildren.remove(child);
+                                      });
+                                    },
                                   ),
                                 ],
-                              ],
-                            ),
-                          ),
+                              ),
+                            )).toList(),
+                            const SizedBox(height: 12),
+                          ],
 
+                          // Certificate Upload Header
+                          const Text(
+                            'Enrollment Verification (Optional)',
+                            style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Upload a student\'s enrollment form to link them to your account. You can register multiple children or do this later from your settings.',
+                            style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                          ),
                           const SizedBox(height: 12),
 
                           ElevatedButton.icon(
@@ -451,7 +488,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
                             icon: const Icon(Icons.upload_file_outlined, color: Color(0xFF16A34A)),
-                            label: const Text('Choose Custom Certificate from Device', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            label: const Text('Scan Student Enrollment Form', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ),
 
                           const SizedBox(height: 24),

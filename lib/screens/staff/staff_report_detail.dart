@@ -500,6 +500,12 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
     _selectedDiscipline = 'Warning';
     _disciplineNotesController.clear();
 
+    final staff = _db.currentUser;
+    final isMinorOnly = staff?.role == UserRole.principal || staff?.role == UserRole.ministrong_tagasubaybay;
+    final dropdownItems = isMinorOnly
+        ? ['Warning', 'Counseling', 'Mediation', 'Community Service', 'Parent Consultation', 'Other']
+        : ['Warning', 'Counseling', 'Mediation', 'Suspension', 'Expulsion', 'Community Service', 'Parent Consultation', 'Other'];
+
     showDialog(
       context: context,
       builder: (context) {
@@ -526,7 +532,7 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
                       decoration: _dialogInputDecoration('Disciplinary Action Given'),
                       dropdownColor: Colors.white,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      items: ['Warning', 'Counseling', 'Mediation', 'Suspension', 'Expulsion', 'Community Service', 'Parent Consultation', 'Other']
+                      items: dropdownItems
                           .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                           .toList(),
                       onChanged: (val) {
@@ -609,11 +615,17 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
     final staff = _db.currentUser;
     if (staff == null) return;
 
-    String title = 'Escalate to OSD';
-    String content = 'Are you sure you want to escalate this report to the Office of Student Discipline (OSD) for formal intervention?';
-    if (staff.role == UserRole.principal) {
+    String title = 'Escalate Case';
+    String content = 'Are you sure you want to escalate this report?';
+    if (staff.role == UserRole.adviser) {
+      title = 'Escalate to Principal';
+      content = 'Are you sure you want to escalate this report to the School Principal for formal review?';
+    } else if (staff.role == UserRole.principal) {
       title = 'Escalate to Ministrong';
       content = 'Are you sure you want to escalate this report to the Ministrong Tagasubaybay for review?';
+    } else if (staff.role == UserRole.ministrong_tagasubaybay) {
+      title = 'Escalate to OSD';
+      content = 'Are you sure you want to forward this report to the Office of Student Discipline (OSD) for formal investigation?';
     }
 
     showDialog(
@@ -661,9 +673,13 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
       await _db.escalateReport(widget.reportId);
       if (!mounted) return;
       
-      String msg = 'Report successfully escalated to Office of Student Discipline (OSD).';
-      if (staff.role == UserRole.principal) {
-        msg = 'Report successfully escalated to Ministrong Tagasubaybay.';
+      String msg = 'Report successfully escalated.';
+      if (staff.role == UserRole.adviser) {
+        msg = 'Report successfully escalated to the School Principal.';
+      } else if (staff.role == UserRole.principal) {
+        msg = 'Report successfully escalated to the Ministrong Tagasubaybay.';
+      } else if (staff.role == UserRole.ministrong_tagasubaybay) {
+        msg = 'Report successfully escalated to the Office of Student Discipline (OSD).';
       }
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1232,23 +1248,26 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
                 const SizedBox(height: 10),
 
                 // Resolve Button
-                ElevatedButton.icon(
-                  onPressed: _showResolveCaseDialog,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF16A34A),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                if (staff.role != UserRole.adviser) ...[
+                  ElevatedButton.icon(
+                    onPressed: _showResolveCaseDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text('Resolve Incident Case', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
-                  icon: const Icon(Icons.check_circle_outline, size: 18),
-                  label: const Text('Resolve Incident Case', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                ],
               ],
 
               // Escalate Button (if allowed)
-              if ((staff.role == UserRole.principal && report.status != 'Escalated' && report.status != 'Escalated to Ministrong') ||
+              if ((staff.role == UserRole.adviser && report.status == 'Pending') ||
+                  (staff.role == UserRole.principal && report.status == 'Escalated to Principal') ||
                   (staff.role == UserRole.ministrong_tagasubaybay && report.status == 'Escalated to Ministrong')) ...[
                 ElevatedButton.icon(
                   onPressed: _showEscalateDialog,
@@ -1261,9 +1280,11 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
                   ),
                   icon: const Icon(Icons.arrow_upward, size: 18),
                   label: Text(
-                    staff.role == UserRole.principal
-                        ? 'Escalate to Ministrong'
-                        : 'Forward to OSD Officer',
+                    staff.role == UserRole.adviser
+                        ? 'Escalate to Principal'
+                        : staff.role == UserRole.principal
+                            ? 'Escalate to Ministrong'
+                            : 'Forward to OSD Officer',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
@@ -1370,20 +1391,52 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
   }
 
   Widget _victimInfoBox(ReportModel r) {
+    final isAdviserObserved = r.reportSource == 'Adviser-Observed';
+    final reporterLabel = isAdviserObserved 
+        ? (r.reporterName != null ? 'Adviser: ${r.reporterName}' : r.parentName)
+        : '${r.parentName} (Parent)';
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: isAdviserObserved ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+        border: Border.all(color: isAdviserObserved ? const Color(0xFF99F6E4) : const Color(0xFFE2E8F0)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         children: [
+          if (isAdviserObserved) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F766E),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.visibility_outlined, color: Colors.white, size: 12),
+                  SizedBox(width: 4),
+                  Text(
+                    'ADVISER-OBSERVED INCIDENT',
+                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
           _infoRow('Victim name', r.studentName),
           const SizedBox(height: 6),
           _infoRow('Grade / Section', '${r.studentGrade} - ${r.studentSection}'),
           const SizedBox(height: 6),
-          _infoRow('Submitted By', '${r.parentName} (Parent)'),
+          _infoRow('Report Source', isAdviserObserved ? 'Adviser Direct Observation' : 'Parent-Reported'),
+          const SizedBox(height: 6),
+          _infoRow('Submitted By', reporterLabel),
+          if (r.urgencyLevel != 'Moderate') ...[
+            const SizedBox(height: 6),
+            _infoRow('Urgency Level', '${r.urgencyLevel} Severity'),
+          ],
         ],
       ),
     );

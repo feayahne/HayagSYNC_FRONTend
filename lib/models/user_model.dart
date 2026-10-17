@@ -1,3 +1,5 @@
+import 'student_model.dart';
+
 enum UserRole { parent, adviser, principal, ministrong_tagasubaybay, osd }
 
 class UserModel {
@@ -15,6 +17,7 @@ class UserModel {
   final String? studentGrade;
   final String? studentSection;
   final String? academicYear;
+  final List<StudentModel>? students;
 
   UserModel({
     required this.id,
@@ -27,6 +30,7 @@ class UserModel {
     this.studentGrade,
     this.studentSection,
     this.academicYear,
+    this.students,
   });
 
   String get roleString {
@@ -56,24 +60,28 @@ class UserModel {
       'studentGrade': studentGrade,
       'studentSection': studentSection,
       'academicYear': academicYear,
+      'students': students?.map((e) => e.toJson()).toList(),
     };
   }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'],
+      id: json['id'].toString(),
       email: json['email'],
       name: json['name'],
       role: UserRole.values.firstWhere(
         (e) => e.toString().split('.').last == json['role'],
         orElse: () => UserRole.parent,
       ),
-      avatarUrl: json['avatarUrl'],
-      assignedSection: json['assignedSection'],
-      studentName: json['studentName'],
-      studentGrade: json['studentGrade'],
-      studentSection: json['studentSection'],
-      academicYear: json['academicYear'],
+      avatarUrl: json['avatarUrl'] ?? json['avatar_url'],
+      assignedSection: json['assignedSection'] ?? json['assigned_section'],
+      studentName: json['studentName'] ?? json['student_name'],
+      studentGrade: json['studentGrade'] ?? json['student_grade'],
+      studentSection: json['studentSection'] ?? json['student_section'],
+      academicYear: json['academicYear'] ?? json['academic_year'],
+      students: json['students'] != null
+          ? (json['students'] as List).map((e) => StudentModel.fromJson(e)).toList()
+          : null,
     );
   }
 
@@ -84,6 +92,7 @@ class UserModel {
     String? studentGrade,
     String? studentSection,
     String? academicYear,
+    List<StudentModel>? students,
   }) {
     return UserModel(
       id: id,
@@ -96,6 +105,7 @@ class UserModel {
       studentGrade: studentGrade ?? this.studentGrade,
       studentSection: studentSection ?? this.studentSection,
       academicYear: academicYear ?? this.academicYear,
+      students: students ?? this.students,
     );
   }
 }

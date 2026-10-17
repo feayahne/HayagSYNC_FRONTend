@@ -38,6 +38,10 @@ class StatusBadge extends StatelessWidget {
         color = Colors.orange.withOpacity(0.12);
         textColor = Colors.orange.shade700;
         break;
+      case 'Escalated to Principal':
+        color = Colors.teal.withOpacity(0.12);
+        textColor = Colors.teal.shade700;
+        break;
       case 'Resolved':
         color = Colors.green.withOpacity(0.12);
         textColor = Colors.green.shade700;
