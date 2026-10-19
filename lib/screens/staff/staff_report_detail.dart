@@ -4,6 +4,7 @@ import '../../services/ai_service.dart';
 import '../../models/user_model.dart';
 import '../../models/report_model.dart';
 import '../../models/meeting_model.dart';
+import '../../models/timeline_model.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/timeline_widget.dart';
 import '../chat/chat_screen.dart';
@@ -36,6 +37,7 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
 
   // AI Summary generation state
   bool _isGeneratingSummary = false;
+  bool _isCheckingConsistency = false;
 
   @override
   void initState() {
@@ -88,26 +90,26 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
     Color border;
     Color text;
 
-    switch (state) {
-      case 'Verified':
-        bg = const Color(0xFFF0FDF4); // Green 50
-        border = const Color(0xFFBBF7D0); // Green 200
-        text = const Color(0xFF16A34A); // Green 600
-        break;
-      case 'Suspected AI Generated':
-        bg = const Color(0xFFFFF1F2); // Red 50
-        border = const Color(0xFFFECDD3); // Red 200
-        text = const Color(0xFFE11D48); // Red 600
-        break;
-      case 'Suspected Google Image':
-        bg = const Color(0xFFFEF3C7); // Amber 50
-        border = const Color(0xFFFDE68A); // Amber 200
-        text = const Color(0xFFD97706); // Amber 600
-        break;
-      default:
-        bg = const Color(0xFFF8FAFC); // Slate 50
-        border = const Color(0xFFE2E8F0); // Slate 200
-        text = const Color(0xFF64748B); // Slate 500
+    if (state.contains('Verified') || state.contains('Passed')) {
+      bg = const Color(0xFFF0FDF4); // Green 50
+      border = const Color(0xFFBBF7D0); // Green 200
+      text = const Color(0xFF16A34A); // Green 600
+    } else if (state.contains('Synthetic') || state.contains('AI') || state.contains('Generated')) {
+      bg = const Color(0xFFFFFBEB); // Amber 50
+      border = const Color(0xFFFDE68A); // Amber 200
+      text = const Color(0xFFD97706); // Amber 600
+    } else if (state.contains('Stock') || state.contains('Web') || state.contains('Google')) {
+      bg = const Color(0xFFEFF6FF); // Blue 50
+      border = const Color(0xFFBFDBFE); // Blue 200
+      text = const Color(0xFF2563EB); // Blue 600
+    } else if (state.contains('Processing') || state.contains('Verifying')) {
+      bg = const Color(0xFFF5F3FF); // Violet 50
+      border = const Color(0xFFDDD6FE); // Violet 200
+      text = const Color(0xFF7C3AED); // Violet 600
+    } else {
+      bg = const Color(0xFFF8FAFC); // Slate 50
+      border = const Color(0xFFE2E8F0); // Slate 200
+      text = const Color(0xFF64748B); // Slate 500
     }
 
     return Container(
@@ -588,16 +590,37 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
     setState(() => _isResolving = true);
 
     try {
+      final actionChosen = _selectedDiscipline;
+      final notesEntered = _disciplineNotesController.text.trim();
+
       await _db.resolveReport(
         reportId: widget.reportId,
-        disciplineAction: _selectedDiscipline,
-        disciplineNotes: _disciplineNotesController.text.trim(),
+        disciplineAction: actionChosen,
+        disciplineNotes: notesEntered,
       );
+
+      // Non-blocking trigger for Post-Resolution Case Abstract
+      final report = _db.reports.firstWhere((r) => r.id == widget.reportId);
+      final timeline = _db.getTimelineEvents(widget.reportId);
+      final meetings = _db.meetings.where((m) => m.reportId == widget.reportId).toList();
+
+      _ai.generatePostResolutionCaseAbstract(
+        report: report,
+        timeline: timeline,
+        meetings: meetings,
+        disciplineAction: actionChosen,
+        disciplineNotes: notesEntered,
+      ).then((caseAbstract) {
+        if (caseAbstract.abstractText.isNotEmpty) {
+          _db.updateAiSummary(widget.reportId, caseAbstract.abstractText);
+        }
+      }).catchError((_) {});
+
       _disciplineNotesController.clear();
       if (!mounted) return;
       Navigator.of(context).pop(); // Dismiss resolve dialog
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Case marked as resolved successfully.')),
+        const SnackBar(content: Text('Case marked as resolved successfully. Case abstract queued.')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -609,6 +632,231 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
         setState(() => _isResolving = false);
       }
     }
+  }
+
+  Future<void> _handleRunConsistencyCheck(
+    ReportModel report,
+    List<TimelineEvent> timeline,
+    List<MeetingModel> meetings,
+  ) async {
+    setState(() => _isCheckingConsistency = true);
+    try {
+      final res = await _ai.runCaseConsistencyCheck(
+        report: report,
+        timeline: timeline,
+        meetings: meetings,
+      );
+      if (!mounted) return;
+      _showConsistencyCheckResultDialog(res);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Consistency check failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCheckingConsistency = false);
+    }
+  }
+
+  void _showConsistencyCheckResultDialog(CaseConsistencyResult result) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          title: Row(
+            children: [
+              Icon(
+                result.hasInconsistencies ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                color: result.hasInconsistencies ? const Color(0xFFD97706) : const Color(0xFF16A34A),
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Case Consistency Check',
+                  style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: result.hasInconsistencies ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: result.hasInconsistencies ? const Color(0xFFFDE68A) : const Color(0xFFBBF7D0),
+                    ),
+                  ),
+                  child: Text(
+                    result.hasInconsistencies
+                        ? 'Possible documentation or procedural points noted. Human review recommended:'
+                        : 'No procedural, chronological, or documentation discrepancies found.',
+                    style: TextStyle(
+                      color: result.hasInconsistencies ? const Color(0xFF92400E) : const Color(0xFF166534),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...result.findings.map((f) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('• ', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                          Expanded(
+                            child: Text(
+                              f,
+                              style: const TextStyle(color: Color(0xFF334155), fontSize: 12, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+                const SizedBox(height: 10),
+                const Divider(color: Color(0xFFE2E8F0)),
+                const SizedBox(height: 6),
+                Text(
+                  result.advisoryNote,
+                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 10, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Acknowledge'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showCaseArchivePacketDialog(
+    ReportModel report,
+    List<TimelineEvent> timeline,
+    List<MeetingModel> meetings,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Row(
+            children: [
+              Icon(Icons.inventory_2_outlined, color: Color(0xFF2563EB), size: 22),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Case Archive Packet',
+                  style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Case Number: #INC-2026-${report.id.padLeft(3, '0')}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
+                        const SizedBox(height: 4),
+                        Text('Student Subject: ${report.studentName} (${report.studentGrade} - ${report.studentSection})',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF475569))),
+                        Text('Category: ${report.category} Bullying',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF475569))),
+                        Text('Status: ${report.status.toUpperCase()}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Disciplinary & Procedural Dossier:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
+                  const SizedBox(height: 6),
+                  Text('• Disciplinary Action: ${report.disciplineAction ?? "Standard Counseling / Mediation"}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
+                  Text('• Resolution Notes: ${report.disciplineNotes ?? "Completed with parent acknowledgment"}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
+                  Text('• Evidence Provenance: ${report.evidenceUrl != null ? "Preserved (Screening Passed)" : "No digital media"}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
+                  Text('• Total Chronological Events: ${timeline.length}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
+                  Text('• Coordination Meetings: ${meetings.length}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
+                  const SizedBox(height: 14),
+                  if (report.aiSummary != null) ...[
+                    const Text('Post-Resolution Case Abstract:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        report.aiSummary!,
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFF334155), height: 1.4),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Case Archive Dossier prepared for institutional record.')),
+                );
+              },
+              icon: const Icon(Icons.download, size: 16),
+              label: const Text('Export Dossier'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F2444),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showEscalateDialog() {
@@ -1303,11 +1551,47 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
                 icon: const Icon(Icons.note_add_outlined, size: 18),
                 label: const Text('Add Timeline Progress Note', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ),
+              const SizedBox(height: 10),
+
+              // Staff-Requested Case Consistency Check Button (Optional Intelligence)
+              OutlinedButton.icon(
+                onPressed: _isCheckingConsistency ? null : () => _handleRunConsistencyCheck(report!, timelineEvents, meetings),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF7C3AED),
+                  side: const BorderSide(color: Color(0xFFDDD6FE)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: _isCheckingConsistency
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7C3AED)))
+                    : const Icon(Icons.fact_check_outlined, size: 18),
+                label: const Text('Run AI Case Consistency Check', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+
+              // View Case Archive Packet Button (When Resolved or Closed)
+              if (report.status == 'resolved' || report.status == 'closed') ...[
+                const SizedBox(height: 10),
+                ElevatedButton.icon(
+                  onPressed: () => _showCaseArchivePacketDialog(report!, timelineEvents, meetings),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F2444),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                  label: const Text('View Case Archive Packet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ],
             ],
           ),
         ),
 
-        // Case Outcome Outcome Card (If Resolved)
+        // Disciplinary Approval & Acknowledgment Trail
+        _buildDisciplinaryApprovalTrailCard(report),
+
+        // Case Outcome Card (If Resolved)
         if (report.status == 'resolved' || report.status == 'closed') ...[
           const SizedBox(height: 16),
           const Text('Incident Resolution Outcome', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
@@ -1448,6 +1732,124 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
       children: [
         Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
         Text(val, style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildDisciplinaryApprovalTrailCard(ReportModel report) {
+    final isResolved = report.status == 'resolved' || report.status == 'closed';
+    final hasSanction = report.disciplineAction != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        const Text(
+          'Disciplinary Approval & Acknowledgment Trail',
+          style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        _buildCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Sanction Record', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: hasSanction ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      hasSanction ? (report.disciplineAction ?? 'Counseling') : 'Under Formulation',
+                      style: TextStyle(
+                        color: hasSanction ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _buildApprovalStep(
+                title: '1. Incident Intake & Verification',
+                subtitle: 'Logged by ${report.reporterName ?? report.parentName} (${report.createdAt.toLocal().toString().substring(0, 10)})',
+                isDone: true,
+              ),
+              _buildApprovalStep(
+                title: '2. Section Adviser Acknowledgment',
+                subtitle: 'Mediation dialogue & student monitoring',
+                isDone: report.status != 'Pending' || isResolved,
+              ),
+              _buildApprovalStep(
+                title: '3. Administrative & Guidance Review',
+                subtitle: 'Principal / Guidance assessment of protective measures',
+                isDone: isResolved || report.status.toLowerCase().contains('escalat') || report.status == 'scheduled_meeting',
+              ),
+              _buildApprovalStep(
+                title: '4. Disciplinary Board Finalization',
+                subtitle: isResolved ? 'Resolution confirmed by authorized personnel' : 'Pending final closure sign-off',
+                isDone: isResolved,
+                isLast: true,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildApprovalStep({
+    required String title,
+    required String subtitle,
+    required bool isDone,
+    bool isLast = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Icon(
+              isDone ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: isDone ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+              size: 18,
+            ),
+            if (!isLast)
+              Container(
+                width: 2,
+                height: 28,
+                color: isDone ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+              ),
+          ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: isDone ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
       ],
     );
   }

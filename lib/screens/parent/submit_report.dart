@@ -357,27 +357,12 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_isAnalyzingEvidence) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait until evidence analysis completes.')),
-      );
-      return;
-    }
 
     // Check if any uploads are in progress
     final hasOngoingUploads = _selectedMediaList.any((m) => m.uploadProgress >= 0.0 && m.uploadProgress < 1.0);
     if (hasOngoingUploads) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait for all uploads to complete before submitting.')),
-      );
-      return;
-    }
-
-    // Check if any uploads failed
-    final hasFailedUploads = _selectedMediaList.any((m) => m.uploadProgress == -2.0);
-    if (hasFailedUploads) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please remove or retry failed file uploads before submitting.')),
+        const SnackBar(content: Text('Please wait for file attachment upload to finish.')),
       );
       return;
     }
@@ -404,14 +389,6 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
     });
 
     try {
-      // 2. Generate AI summary automatically on submit
-      final summary = await _ai.generateReportSummary(
-        title: _titleController.text,
-        description: _descriptionController.text,
-        category: _selectedCategory,
-        location: _selectedLocation,
-      );
-
       final witnessesList = _witnessControllers
           .map((c) => c.text.trim())
           .where((t) => t.isNotEmpty)
@@ -422,36 +399,59 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
           .where((u) => u != null)
           .join(',');
 
-      // 3. Save report
-      await _db.submitReport(
+      // Non-blocking screening state
+      final screeningState = evidenceUrls.isNotEmpty
+          ? (_evidenceVerificationState == 'Verifying...' ? 'Screening: Processing' : _evidenceVerificationState)
+          : 'Unverified';
+
+      // 2. Immediate Immutable Save (Parent is never blocked by AI latency)
+      final newReport = await _db.submitReport(
         title: _titleController.text,
         description: _descriptionController.text,
         category: _selectedCategory,
         incidentDate: incidentDateTime,
         incidentLocation: _selectedLocation,
         evidenceUrl: evidenceUrls.isEmpty ? null : evidenceUrls,
-        evidenceVerificationState: evidenceUrls.isNotEmpty ? _evidenceVerificationState : 'Unverified',
+        evidenceVerificationState: screeningState,
         evidenceVerificationDetails: _evidenceVerificationDetails,
-        aiSummary: summary,
+        aiSummary: null, // Populated asynchronously
         bullyName: _bullyNameController.text.trim().isEmpty ? null : _bullyNameController.text.trim(),
         bullyGradeSection: _bullyGradeSectionController.text.trim().isEmpty ? null : _bullyGradeSectionController.text.trim(),
         witnesses: witnessesList.isEmpty ? null : witnessesList,
         studentId: _db.selectedChild?.id,
       );
 
+      // 3. Asynchronous background category validation & digest generation
+      unawaited(() async {
+        try {
+          final summary = await _ai.generateReportSummary(
+            title: newReport.title,
+            description: newReport.description,
+            category: newReport.category,
+            location: newReport.incidentLocation,
+          );
+          await _db.updateAiSummary(newReport.id, summary);
+        } catch (_) {}
+      }());
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report submitted successfully!')),
+        const SnackBar(
+          content: Text('Incident report submitted successfully. Official case created.'),
+          backgroundColor: Color(0xFF16A34A),
+        ),
       );
-      Navigator.of(context).pop(); // Back to dashboard
+      Navigator.of(context).pop(); // Back to dashboard immediately
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Submission failed: $e')),
       );
     } finally {
-      setState(() {
-        _isSubmitting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 

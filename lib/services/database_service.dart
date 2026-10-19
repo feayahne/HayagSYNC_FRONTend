@@ -40,6 +40,9 @@ class DatabaseService extends ChangeNotifier {
   final List<ChatMessage> _messages = [];
   final List<TimelineEvent> _timelines = [];
 
+  List<ReportModel> get reports => List.unmodifiable(_reports);
+  List<MeetingModel> get meetings => List.unmodifiable(_meetings);
+
   List<String>? _parseWitnesses(dynamic raw) {
     if (raw == null) return null;
     if (raw is List) return raw.map((e) => e.toString()).toList();
@@ -128,6 +131,7 @@ class DatabaseService extends ChangeNotifier {
         .maybeSingle();
 
     if (res == null) {
+      logLoginAttempt(email: cleanEmail, success: false, failureReason: 'Account not found');
       throw Exception('No account found with this email ($cleanEmail).');
     }
 
@@ -145,8 +149,11 @@ class DatabaseService extends ChangeNotifier {
     }
 
     if (!isValidPass) {
+      logLoginAttempt(userId: res['id']?.toString(), email: cleanEmail, success: false, failureReason: 'Incorrect credentials');
       throw Exception('The provided password is incorrect.');
     }
+
+    logLoginAttempt(userId: res['id']?.toString(), email: cleanEmail, success: true);
 
     _token = 'supabase_auth_${res['id']}';
     _currentUser = UserModel.fromJson(res);
@@ -901,5 +908,47 @@ class DatabaseService extends ChangeNotifier {
         .from('duplicate_flags')
         .delete()
         .eq('id', int.parse(id));
+  }
+
+  // --- GAP 4: AUDIT LOGGING & LOGIN HISTORY ---
+
+  Future<void> logLoginAttempt({
+    String? userId,
+    required String email,
+    required bool success,
+    String? failureReason,
+  }) async {
+    try {
+      await _supabase.from('login_history').insert({
+        'user_id': userId != null ? int.tryParse(userId) : null,
+        'attempted_email': email,
+        'status': success ? 'SUCCESS' : 'FAILURE',
+        'failure_reason': failureReason,
+        'ip_address': '127.0.0.1 (Mobile App)',
+        'device_info': 'HayagSync Flutter Client',
+      });
+    } catch (_) {}
+  }
+
+  Future<void> logActivity({
+    required String action,
+    required String entityName,
+    required String recordId,
+    Map<String, dynamic>? oldValues,
+    Map<String, dynamic>? newValues,
+  }) async {
+    try {
+      await _supabase.from('activity_logs').insert({
+        'user_id': int.tryParse(_currentUser?.id ?? '0'),
+        'user_email': _currentUser?.email,
+        'user_role': _currentUser?.roleString,
+        'action': action,
+        'entity_name': entityName,
+        'record_id': recordId,
+        'old_values': oldValues,
+        'new_values': newValues,
+        'ip_address': '127.0.0.1 (Mobile App)',
+      });
+    } catch (_) {}
   }
 }
