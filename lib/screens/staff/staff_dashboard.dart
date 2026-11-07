@@ -21,7 +21,11 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
   final _db = DatabaseService();
 
   String? _selectedStatusFilter;
-  String? _selectedSectionFilter; // For Principal/OSD global views
+  String? _selectedSectionFilter;
+  String? _selectedGradeFilter;
+  bool _filterAnonymousOnly = false;
+  final _reportSearchController = TextEditingController();
+  final _parentSearchController = TextEditingController();
 
   @override
   void initState() {
@@ -34,6 +38,8 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
   void dispose() {
     _tabController.dispose();
     _db.removeListener(_onDbUpdate);
+    _reportSearchController.dispose();
+    _parentSearchController.dispose();
     super.dispose();
   }
 
@@ -46,6 +52,16 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
+  }
+
+  void _toggleStageFilter(String stage) {
+    setState(() {
+      if (_selectedStatusFilter == stage) {
+        _selectedStatusFilter = null;
+      } else {
+        _selectedStatusFilter = stage;
+      }
+    });
   }
 
   void _toggleStatusFilter(String status) {
@@ -67,34 +83,73 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
     // Query reports based on RLS rules
     var reports = _db.getReports();
 
-    // Calculate count for stats cards
-    final pendingCount = reports.where((r) => r.status.toLowerCase() == 'pending').length;
-    final reviewCount = reports.where((r) => r.status.toLowerCase() == 'under review' || r.status.toLowerCase() == 'under_review').length;
-    final scheduledCount = reports.where((r) => r.status.toLowerCase() == 'scheduled' || r.status.toLowerCase() == 'scheduled_meeting').length;
-    final escalatedCount = reports.where((r) => r.status.toLowerCase() == 'escalated' || r.status.toLowerCase() == 'escalated to ministrong' || r.status.toLowerCase() == 'escalated to principal').length;
+    // Calculate counts for 5-stage workflow stats cards
+    final stage1Count = reports.where((r) => r.stageNumber == 1 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').length;
+    final stage2Count = reports.where((r) => r.stageNumber == 2 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').length;
+    final stage3Count = reports.where((r) => r.stageNumber == 3 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').length;
+    final stage4Count = reports.where((r) => r.stageNumber == 4 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').length;
+    final stage5Count = reports.where((r) => r.stageNumber == 5 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').length;
     final resolvedCount = reports.where((r) => r.status.toLowerCase() == 'resolved' || r.status.toLowerCase() == 'closed').length;
+    final anonymousCount = reports.where((r) => r.isAnonymous).length;
+    final escalatedCount = reports.where((r) => r.status.toLowerCase().contains('escalat') || r.stageNumber >= 2).length;
 
-    // Apply Status Filter
+    // Apply Stage / Status Filter
     if (_selectedStatusFilter != null) {
-      if (_selectedStatusFilter == 'resolved') {
+      if (_selectedStatusFilter == 'stage_1') {
+        reports = reports.where((r) => r.stageNumber == 1 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').toList();
+      } else if (_selectedStatusFilter == 'stage_2') {
+        reports = reports.where((r) => r.stageNumber == 2 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').toList();
+      } else if (_selectedStatusFilter == 'stage_3') {
+        reports = reports.where((r) => r.stageNumber == 3 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').toList();
+      } else if (_selectedStatusFilter == 'stage_4') {
+        reports = reports.where((r) => r.stageNumber == 4 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').toList();
+      } else if (_selectedStatusFilter == 'stage_5') {
+        reports = reports.where((r) => r.stageNumber == 5 && r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').toList();
+      } else if (_selectedStatusFilter == 'resolved') {
         reports = reports.where((r) => r.status.toLowerCase() == 'resolved' || r.status.toLowerCase() == 'closed').toList();
-      } else if (_selectedStatusFilter == 'under_review') {
-        reports = reports.where((r) => r.status.toLowerCase() == 'under review' || r.status.toLowerCase() == 'under_review').toList();
-      } else if (_selectedStatusFilter == 'scheduled_meeting') {
-        reports = reports.where((r) => r.status.toLowerCase() == 'scheduled' || r.status.toLowerCase() == 'scheduled_meeting').toList();
-      } else if (_selectedStatusFilter == 'escalated') {
-        reports = reports.where((r) => r.status.toLowerCase() == 'escalated' || r.status.toLowerCase() == 'escalated to ministrong' || r.status.toLowerCase() == 'escalated to principal').toList();
       } else {
         reports = reports.where((r) => r.status.toLowerCase() == _selectedStatusFilter).toList();
       }
     }
 
-    // Apply Section Filter (Principal/OSD/Ministrong only)
-    if ((staff.role == UserRole.principal || staff.role == UserRole.osd || staff.role == UserRole.ministrong_tagasubaybay) && _selectedSectionFilter != null) {
+    // Apply Grade Filter
+    if (_selectedGradeFilter != null) {
+      reports = reports.where((r) => r.studentGrade == _selectedGradeFilter || r.studentSection.contains(_selectedGradeFilter!)).toList();
+    }
+
+    // Apply Anonymous Filter
+    if (_filterAnonymousOnly) {
+      reports = reports.where((r) => r.isAnonymous).toList();
+    }
+
+    // Apply Section Filter
+    if (_selectedSectionFilter != null) {
       reports = reports.where((r) => r.studentSection == _selectedSectionFilter).toList();
     }
 
-    final parentsList = _db.getParentsList();
+    // Apply Search Filter for reports
+    final repQuery = _reportSearchController.text.trim().toLowerCase();
+    if (repQuery.isNotEmpty) {
+      reports = reports.where((r) =>
+        r.studentName.toLowerCase().contains(repQuery) ||
+        r.title.toLowerCase().contains(repQuery) ||
+        r.category.toLowerCase().contains(repQuery) ||
+        r.id.toLowerCase().contains(repQuery) ||
+        r.studentSection.toLowerCase().contains(repQuery) ||
+        (r.bullyName != null && r.bullyName!.toLowerCase().contains(repQuery))
+      ).toList();
+    }
+
+    var parentsList = _db.getParentsList();
+    final parQuery = _parentSearchController.text.trim().toLowerCase();
+    if (parQuery.isNotEmpty) {
+      parentsList = parentsList.where((p) =>
+        p.name.toLowerCase().contains(parQuery) ||
+        (p.studentName != null && p.studentName!.toLowerCase().contains(parQuery)) ||
+        (p.email.toLowerCase().contains(parQuery)) ||
+        (p.studentSection != null && p.studentSection!.toLowerCase().contains(parQuery))
+      ).toList();
+    }
 
     final allSections = [
       'Grade 7 - Mahogany',
@@ -120,13 +175,19 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
       roleBadge = 'Section Adviser';
     } else if (staff.role == UserRole.principal) {
       bannerColors = const [Color(0xFF1E40AF), Color(0xFF2563EB)]; // Blue
-      roleBadge = 'Principal';
+      roleBadge = 'School Principal';
     } else if (staff.role == UserRole.ministrong_tagasubaybay) {
       bannerColors = const [Color(0xFF7C3AED), Color(0xFF8B5CF6)]; // Purple
       roleBadge = 'Ministrong Tagasubaybay';
+    } else if (staff.role == UserRole.board_of_discipline) {
+      bannerColors = const [Color(0xFF9333EA), Color(0xFFC026D3)]; // Fuchsia
+      roleBadge = 'Board of Discipline';
+    } else if (staff.role == UserRole.school_president) {
+      bannerColors = const [Color(0xFF1E3A8A), Color(0xFF1D4ED8)]; // Navy
+      roleBadge = 'School President';
     } else {
       bannerColors = const [Color(0xFF1E293B), Color(0xFF475569)]; // Slate (OSD)
-      roleBadge = 'OSD Officer';
+      roleBadge = 'Office of Student Discipline (OSD)';
     }
 
     return Scaffold(
@@ -263,7 +324,19 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                                       const SizedBox(width: 8),
                                       Text(
                                         'Assigned: ${staff.assignedSection}',
-                                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          '${_db.getStudents().length} Students',
+                                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
                                       ),
                                     ],
                                   ],
@@ -327,10 +400,10 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                     ),
                     const SizedBox(height: 20),
 
-                    // Statistics Row (Clickable filter cards)
+                    // Statistics Row: 5-Stage Multi-Level Incident Progress + Resolved
                     LayoutBuilder(
                       builder: (context, constraints) {
-                        final bool isMobile = constraints.maxWidth < 600;
+                        final bool isMobile = constraints.maxWidth < 750;
                         if (isMobile) {
                           return GridView.count(
                             shrinkWrap: true,
@@ -338,25 +411,28 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                             crossAxisCount: 3,
                             crossAxisSpacing: 8,
                             mainAxisSpacing: 8,
-                            childAspectRatio: 1.3,
+                            childAspectRatio: 1.15,
                             children: [
-                              _buildStatCard('Pending', pendingCount, const Color(0xFFCA8A04), const Color(0xFFFEF9C3), 'pending'),
-                              _buildStatCard('Under Review', reviewCount, const Color(0xFF2563EB), const Color(0xFFEFF6FF), 'under_review'),
-                              _buildStatCard('Meetings', scheduledCount, const Color(0xFF7C3AED), const Color(0xFFF5F3FF), 'scheduled_meeting'),
-                              _buildStatCard('Escalated', escalatedCount, const Color(0xFFEA580C), const Color(0xFFFFEDD5), 'escalated'),
+                              _buildStatCard('Stage 1: OSD', stage1Count, const Color(0xFF2563EB), const Color(0xFFEFF6FF), 'stage_1'),
+                              _buildStatCard('Stage 2: Ministro+Adv', stage2Count, const Color(0xFF0F766E), const Color(0xFFF0FDFA), 'stage_2'),
+                              _buildStatCard('Stage 3: OSD+Prin', stage3Count, const Color(0xFFD97706), const Color(0xFFFFFBEB), 'stage_3'),
+                              _buildStatCard('Stage 4: Board', stage4Count, const Color(0xFF86198F), const Color(0xFFFDF4FF), 'stage_4'),
+                              _buildStatCard('Stage 5: President', stage5Count, const Color(0xFF1E3A8A), const Color(0xFFEFF6FF), 'stage_5'),
                               _buildStatCard('Resolved', resolvedCount, const Color(0xFF16A34A), const Color(0xFFF0FDF4), 'resolved'),
                             ],
                           );
                         } else {
                           return Row(
                             children: [
-                              Expanded(child: _buildStatCard('Pending', pendingCount, const Color(0xFFCA8A04), const Color(0xFFFEF9C3), 'pending')),
+                              Expanded(child: _buildStatCard('Stage 1: OSD', stage1Count, const Color(0xFF2563EB), const Color(0xFFEFF6FF), 'stage_1')),
                               const SizedBox(width: 8),
-                              Expanded(child: _buildStatCard('Under Review', reviewCount, const Color(0xFF2563EB), const Color(0xFFEFF6FF), 'under_review')),
+                              Expanded(child: _buildStatCard('Stage 2: Ministro & Adviser', stage2Count, const Color(0xFF0F766E), const Color(0xFFF0FDFA), 'stage_2')),
                               const SizedBox(width: 8),
-                              Expanded(child: _buildStatCard('Meetings', scheduledCount, const Color(0xFF7C3AED), const Color(0xFFF5F3FF), 'scheduled_meeting')),
+                              Expanded(child: _buildStatCard('Stage 3: OSD & Principal', stage3Count, const Color(0xFFD97706), const Color(0xFFFFFBEB), 'stage_3')),
                               const SizedBox(width: 8),
-                              Expanded(child: _buildStatCard('Escalated', escalatedCount, const Color(0xFFEA580C), const Color(0xFFFFEDD5), 'escalated')),
+                              Expanded(child: _buildStatCard('Stage 4: Board Delib.', stage4Count, const Color(0xFF86198F), const Color(0xFFFDF4FF), 'stage_4')),
+                              const SizedBox(width: 8),
+                              Expanded(child: _buildStatCard('Stage 5: President Review', stage5Count, const Color(0xFF1E3A8A), const Color(0xFFEFF6FF), 'stage_5')),
                               const SizedBox(width: 8),
                               Expanded(child: _buildStatCard('Resolved', resolvedCount, const Color(0xFF16A34A), const Color(0xFFF0FDF4), 'resolved')),
                             ],
@@ -367,18 +443,22 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
 
                     const SizedBox(height: 24),
 
-                    // Filter toolbar
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // Filter toolbar with Grade, Section, Anonymous, and Active Chips
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      runSpacing: 10,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text(
                               'Incident Reports Log',
                               style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             if (_selectedStatusFilter != null) ...[
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 8),
                               Chip(
                                 label: Text(
                                   _selectedStatusFilter!.toUpperCase().replaceAll('_', ' '),
@@ -390,8 +470,21 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                                 deleteIconColor: const Color(0xFF2563EB),
                               ),
                             ],
+                            if (_selectedGradeFilter != null) ...[
+                              const SizedBox(width: 6),
+                              Chip(
+                                label: Text(
+                                  _selectedGradeFilter!,
+                                  style: const TextStyle(color: Color(0xFF7C3AED), fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                                backgroundColor: const Color(0xFFF5F3FF),
+                                side: const BorderSide(color: Color(0xFFDDD6FE)),
+                                onDeleted: () => setState(() => _selectedGradeFilter = null),
+                                deleteIconColor: const Color(0xFF7C3AED),
+                              ),
+                            ],
                             if (_selectedSectionFilter != null) ...[
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
                               Chip(
                                 label: Text(
                                   _selectedSectionFilter!,
@@ -406,33 +499,119 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                           ],
                         ),
 
-                        // Section Dropdown for Admin Roles
-                        if (staff.role == UserRole.principal || staff.role == UserRole.osd || staff.role == UserRole.ministrong_tagasubaybay)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                              borderRadius: BorderRadius.circular(8),
+                        // Filters row
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            // Anonymous Reports Filter Toggle
+                            FilterChip(
+                              avatar: Icon(Icons.visibility_off, size: 14, color: _filterAnonymousOnly ? Colors.white : const Color(0xFF475569)),
+                              label: Text(
+                                'Anonymous Only ($anonymousCount)',
+                                style: TextStyle(
+                                  color: _filterAnonymousOnly ? Colors.white : const Color(0xFF334155),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              selected: _filterAnonymousOnly,
+                              selectedColor: const Color(0xFF334155),
+                              backgroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(color: _filterAnonymousOnly ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                              ),
+                              onSelected: (val) => setState(() => _filterAnonymousOnly = val),
                             ),
-                            child: DropdownButton<String>(
-                              value: _selectedSectionFilter,
-                              hint: const Text('Filter Section', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                              underline: const SizedBox(),
-                              dropdownColor: Colors.white,
-                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                              items: [
-                                const DropdownMenuItem<String>(value: null, child: Text('All Sections')),
-                                ...allSections.map((sec) => DropdownMenuItem<String>(value: sec, child: Text(sec))),
-                              ],
-                              onChanged: (val) {
-                                setState(() {
-                                  _selectedSectionFilter = val;
-                                });
-                              },
+
+                            // Grade Level Filter Dropdown
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: DropdownButton<String>(
+                                value: _selectedGradeFilter,
+                                hint: const Text('Filter Grade', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                                underline: const SizedBox(),
+                                dropdownColor: Colors.white,
+                                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
+                                items: const [
+                                  DropdownMenuItem<String>(value: null, child: Text('All Grades')),
+                                  DropdownMenuItem<String>(value: 'Grade 7', child: Text('Grade 7')),
+                                  DropdownMenuItem<String>(value: 'Grade 8', child: Text('Grade 8')),
+                                  DropdownMenuItem<String>(value: 'Grade 9', child: Text('Grade 9')),
+                                  DropdownMenuItem<String>(value: 'Grade 10', child: Text('Grade 10')),
+                                  DropdownMenuItem<String>(value: 'Grade 11', child: Text('Grade 11')),
+                                  DropdownMenuItem<String>(value: 'Grade 12', child: Text('Grade 12')),
+                                ],
+                                onChanged: (val) => setState(() => _selectedGradeFilter = val),
+                              ),
                             ),
-                          ),
+
+                            // Section Dropdown for Staff Roles
+                            if (staff.role != UserRole.adviser)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: DropdownButton<String>(
+                                  value: _selectedSectionFilter,
+                                  hint: const Text('Filter Section', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                                  underline: const SizedBox(),
+                                  dropdownColor: Colors.white,
+                                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
+                                  items: [
+                                    const DropdownMenuItem<String>(value: null, child: Text('All Sections')),
+                                    ...allSections.map((sec) => DropdownMenuItem<String>(value: sec, child: Text(sec))),
+                                  ],
+                                  onChanged: (val) => setState(() => _selectedSectionFilter = val),
+                                ),
+                              ),
+                          ],
+                        ),
                       ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Search Input for Reports
+                    TextField(
+                      controller: _reportSearchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: staff.role == UserRole.adviser
+                            ? 'Search students or cases in ${staff.assignedSection}...'
+                            : 'Search all students, cases, or sections...',
+                        prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF64748B)),
+                        suffixIcon: _reportSearchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: Color(0xFF64748B)),
+                                onPressed: () {
+                                  _reportSearchController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                      ),
                     ),
 
                     const SizedBox(height: 12),
@@ -454,12 +633,62 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      staff.role == UserRole.adviser
-                          ? 'Section Registered Directory (${staff.assignedSection})'
-                          : 'Global Registered Parent Directory (All Sections)',
-                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          staff.role == UserRole.adviser
+                              ? 'Section Registered Directory (${staff.assignedSection})'
+                              : 'Global Registered Parent Directory (All Sections)',
+                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${parentsList.length} Parents',
+                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 12),
+
+                    // Search Input for Parents
+                    TextField(
+                      controller: _parentSearchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: staff.role == UserRole.adviser
+                            ? 'Search parents or students in ${staff.assignedSection}...'
+                            : 'Search parents or students across all sections...',
+                        prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF64748B)),
+                        suffixIcon: _parentSearchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: Color(0xFF64748B)),
+                                onPressed: () {
+                                  _parentSearchController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 16),
                     _buildParentsTable(parentsList),
                   ],
@@ -561,7 +790,34 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      StatusBadge(status: report.status),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _buildStageBadge(report),
+                          StatusBadge(status: report.status),
+                          if (report.isAnonymous)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF334155),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.visibility_off, size: 11, color: Colors.white),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'ANONYMOUS',
+                                    style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
                       Text(
                         report.createdAt.toLocal().toString().substring(0, 10),
                         style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
@@ -577,7 +833,7 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                   Text(
                     report.description,
                     style: const TextStyle(color: Color(0xFF475569), fontSize: 13),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 12),
@@ -602,6 +858,18 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                                 ),
                               ],
                             ),
+                            if (report.bullyName != null && report.bullyName!.isNotEmpty)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.warning_amber_rounded, size: 13, color: Color(0xFFEA580C)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Alleged Bully: ${report.bullyName}',
+                                    style: const TextStyle(color: Color(0xFF9A3412), fontSize: 11, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -610,6 +878,17 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
                                 Text(
                                   'Section: ${report.studentSection}',
                                   style: const TextStyle(color: Color(0xFF475569), fontSize: 11),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.account_balance_outlined, size: 13, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Handling: ${report.currentHandlingOffice}',
+                                  style: const TextStyle(color: Color(0xFF1E40AF), fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
@@ -709,6 +988,66 @@ class _StaffDashboardState extends State<StaffDashboard> with SingleTickerProvid
               }),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStageBadge(ReportModel report) {
+    Color bg;
+    Color fg;
+    String label;
+    if (report.status.toLowerCase() == 'resolved' || report.status.toLowerCase() == 'closed') {
+      bg = const Color(0xFFDCFCE7);
+      fg = const Color(0xFF166534);
+      label = 'RESOLVED';
+    } else {
+      switch (report.stageNumber) {
+        case 1:
+          bg = const Color(0xFFFEF3C7);
+          fg = const Color(0xFF92400E);
+          label = 'STAGE 1: OSD ASSESSMENT';
+          break;
+        case 2:
+          bg = const Color(0xFFEDE9FE);
+          fg = const Color(0xFF5B21B6);
+          label = 'STAGE 2: MINISTRO & ADVISER';
+          break;
+        case 3:
+          bg = const Color(0xFFDBEAFE);
+          fg = const Color(0xFF1E40AF);
+          label = 'STAGE 3: OSD & PRINCIPAL';
+          break;
+        case 4:
+          bg = const Color(0xFFFCE7F3);
+          fg = const Color(0xFF9D174D);
+          label = 'STAGE 4: BOARD OF DISCIPLINE';
+          break;
+        case 5:
+          bg = const Color(0xFFE0E7FF);
+          fg = const Color(0xFF3730A3);
+          label = 'STAGE 5: PRESIDENT REVIEW';
+          break;
+        default:
+          bg = const Color(0xFFF1F5F9);
+          fg = const Color(0xFF475569);
+          label = 'STAGE ${report.stageNumber}';
+      }
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: fg.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.3,
         ),
       ),
     );

@@ -1,6 +1,6 @@
 import 'student_model.dart';
 
-enum UserRole { parent, adviser, principal, ministrong_tagasubaybay, osd }
+enum UserRole { parent, adviser, principal, ministrong_tagasubaybay, osd, board_of_discipline, school_president }
 
 class UserModel {
   final String id;
@@ -45,6 +45,10 @@ class UserModel {
         return 'Ministrong Tagasubaybay';
       case UserRole.osd:
         return 'OSD Officer';
+      case UserRole.board_of_discipline:
+        return 'Board of Discipline';
+      case UserRole.school_president:
+        return 'School President';
     }
   }
 

@@ -411,10 +411,42 @@ class _AiSummaryScreenState extends State<AiSummaryScreen> {
       );
     }
 
+    if (user.role == UserRole.adviser) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF334155)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.shield_outlined, color: Color(0xFF2563EB), size: 20),
+            const SizedBox(width: 12),
+            const Text('Section Scope:',
+                style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(width: 12),
+            Text(
+              user.assignedSection ?? 'Assigned Section',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F766E),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text('Authorized Section', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (user.role == UserRole.principal ||
         user.role == UserRole.osd ||
-        user.role == UserRole.ministrong_tagasubaybay ||
-        user.role == UserRole.adviser) {
+        user.role == UserRole.ministrong_tagasubaybay) {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(

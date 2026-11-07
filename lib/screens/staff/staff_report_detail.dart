@@ -859,85 +859,1198 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
     );
   }
 
-  void _showEscalateDialog() {
-    final staff = _db.currentUser;
-    if (staff == null) return;
+  Widget _build5StageStepper(ReportModel report) {
+    final currentStage = report.stageNumber;
+    final isResolved = report.status.toLowerCase().contains('resolved') || report.status.toLowerCase().contains('closed') || report.status.toLowerCase().contains('finalized');
 
-    String title = 'Escalate Case';
-    String content = 'Are you sure you want to escalate this report?';
-    if (staff.role == UserRole.adviser) {
-      title = 'Escalate to Principal';
-      content = 'Are you sure you want to escalate this report to the School Principal for formal review?';
-    } else if (staff.role == UserRole.principal) {
-      title = 'Escalate to Ministrong';
-      content = 'Are you sure you want to escalate this report to the Ministrong Tagasubaybay for review?';
-    } else if (staff.role == UserRole.ministrong_tagasubaybay) {
-      title = 'Escalate to OSD';
-      content = 'Are you sure you want to forward this report to the Office of Student Discipline (OSD) for formal investigation?';
-    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.account_tree_outlined, color: Color(0xFF2563EB), size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    isResolved ? 'Case Completed / Finalized' : report.stageName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isResolved ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isResolved ? const Color(0xFFBBF7D0) : const Color(0xFFBFDBFE)),
+                ),
+                child: Text(
+                  'Responsible: ${report.currentHandlingOffice}',
+                  style: TextStyle(
+                    color: isResolved ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: List.generate(5, (index) {
+              final stageIdx = index + 1;
+              final isDone = stageIdx < currentStage || isResolved;
+              final isCurrent = stageIdx == currentStage && !isResolved;
+              Color circleColor = const Color(0xFFCBD5E1);
+              if (isDone) circleColor = const Color(0xFF16A34A);
+              if (isCurrent) circleColor = const Color(0xFF2563EB);
+
+              return Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: circleColor,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: isDone
+                                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                                  : Text(
+                                      '$stageIdx',
+                                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Stage $stageIdx',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                              color: isCurrent ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (index < 4)
+                      Container(
+                        width: 12,
+                        height: 2,
+                        color: stageIdx < currentStage || isResolved
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFFE2E8F0),
+                      ),
+                  ],
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradeAssignmentsCard(ReportModel report) {
+    final assignments = DatabaseService.determineGradeAssignments(
+      studentGrade: report.studentGrade,
+      studentSection: report.studentSection,
+      bullyGradeSection: report.bullyGradeSection,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.assignment_ind_outlined, color: Color(0xFF475569), size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Grade-Level Automatic Personnel Assignment',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Involved Grades: ${(assignments['grades'] as List).join(', ')}',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+          ),
+          const SizedBox(height: 6),
+          _buildAssignmentRow('Assigned Ministrong Tagasubaybay', assignments['ministroName'] ?? 'None'),
+          const SizedBox(height: 4),
+          _buildAssignmentRow('Assigned OSD Officer', assignments['osdName'] ?? 'None'),
+          const SizedBox(height: 4),
+          _buildAssignmentRow('Assigned Principal', assignments['principalName'] ?? 'None'),
+          if (report.studentSection.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            _buildAssignmentRow('Section Adviser', report.studentSection),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignmentRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 170,
+          child: Text(
+            '$label:',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAnonymousNotice() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.visibility_off_outlined, color: Color(0xFF16A34A), size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Anonymous Incident Report',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF166534)),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Submitted without an account. Reporter IP address, device info, and identity are completely protected.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF15803D)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // STAGE 1: Forward for Initial Intervention Dialog
+  void _showForwardForInitialInterventionDialog(ReportModel report) {
+    final notesController = TextEditingController();
+    bool isSubmitting = false;
+
+    final assignments = DatabaseService.determineGradeAssignments(
+      studentGrade: report.studentGrade,
+      studentSection: report.studentSection,
+      bullyGradeSection: report.bullyGradeSection,
+    );
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          title: Text(
-            title,
-            style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          content: Text(
-            content,
-            style: const TextStyle(color: Color(0xFF334155), fontSize: 13),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                await _handleEscalate();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE11D48),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.forward_to_inbox, color: Color(0xFF2563EB)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stage 1: Forward for Initial Intervention',
+                      style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
               ),
-              child: const Text('Escalate'),
-            ),
-          ],
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'OSD Initial Assessment Protocol',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E40AF)),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Forwarding this report to the assigned Ministrong Tagasubaybay and Section Adviser for joint investigation and initial student intervention.',
+                            style: TextStyle(fontSize: 12, color: Color(0xFF1E3A8A)),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Assigned Ministro: ${assignments['ministroName']}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                          ),
+                          Text(
+                            'Section Adviser: ${report.studentSection.isNotEmpty ? report.studentSection : "To be confirmed"}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: notesController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 3,
+                      decoration: _dialogInputDecoration('OSD Initial Assessment Notes & Directives (Optional)'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setDialogState(() => isSubmitting = true);
+                          try {
+                            await _db.forwardForInitialIntervention(
+                              reportId: widget.reportId,
+                              notes: notesController.text.trim().isNotEmpty ? notesController.text.trim() : null,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Case officially forwarded to Ministrong Tagasubaybay and Section Adviser.'),
+                                backgroundColor: Color(0xFF16A34A),
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() => isSubmitting = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Forwarding failed: $e')),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Forward for Intervention'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _handleEscalate() async {
+  // STAGE 2: Resolve Case (Initial Intervention)
+  void _showResolveInitialInterventionDialog(ReportModel report) {
+    String selectedAction = 'Counseling & Restorative Agreement';
+    final notesController = TextEditingController();
+    String? formError;
+    bool isSubmitting = false;
+
+    final actions = [
+      'Counseling & Restorative Agreement',
+      'Mediation Conference & Mutual Apology',
+      'Behavioral Contract & Adviser Monitoring',
+      'Guidance Intervention & Peer Support',
+      'Other Restorative Measure',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.check_circle_outline, color: Color(0xFF16A34A)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stage 2: Resolve Case (Joint Intervention)',
+                      style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Record successful joint intervention by Ministrong Tagasubaybay and Section Adviser.',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      value: selectedAction,
+                      decoration: _dialogInputDecoration('Restorative Action Taken *'),
+                      items: actions.map((a) => DropdownMenuItem(value: a, child: Text(a, style: const TextStyle(fontSize: 13)))).toList(),
+                      onChanged: (v) => setDialogState(() => selectedAction = v ?? selectedAction),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 4,
+                      decoration: _dialogInputDecoration('Investigation Findings & Resolution Notes *'),
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(formError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final notes = notesController.text.trim();
+                          if (notes.isEmpty) {
+                            setDialogState(() => formError = 'Please provide the investigation findings and resolution notes.');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            formError = null;
+                          });
+                          try {
+                            await _db.resolveCaseInitialIntervention(
+                              reportId: widget.reportId,
+                              restorativeAction: selectedAction,
+                              notes: notes,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Case successfully marked as Resolved.'),
+                                backgroundColor: Color(0xFF16A34A),
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              formError = 'Resolution failed: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Confirm Resolution'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // STAGE 2: Escalate to OSD and Principal
+  void _showEscalateToOsdAndPrincipalDialog(ReportModel report) {
+    final reasonController = TextEditingController();
+    final notesController = TextEditingController();
+    String? formError;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.arrow_upward, color: Color(0xFFEA580C)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stage 2: Escalate to OSD & Principal',
+                      style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'If the situation cannot be managed or resolved during joint intervention, escalate the case to both OSD and Principal for higher intervention.',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: reasonController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 2,
+                      decoration: _dialogInputDecoration('Reason for Escalation *'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 3,
+                      decoration: _dialogInputDecoration('Intervention History & Witness Summary (Optional)'),
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(formError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final reason = reasonController.text.trim();
+                          if (reason.isEmpty) {
+                            setDialogState(() => formError = 'Please state why the case cannot be resolved at this stage.');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            formError = null;
+                          });
+                          try {
+                            await _db.escalateToOsdAndPrincipal(
+                              reportId: widget.reportId,
+                              reason: reason,
+                              notes: notesController.text.trim().isNotEmpty ? notesController.text.trim() : null,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Case successfully escalated to OSD & Principal.'),
+                                backgroundColor: Color(0xFFEA580C),
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              formError = 'Escalation failed: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEA580C),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Escalate to OSD & Principal'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // STAGE 3: Resolve Case (OSD & Principal)
+  void _showResolveOsdAndPrincipalDialog(ReportModel report) {
+    String selectedAction = 'Written Warning & Reprimand';
+    final notesController = TextEditingController();
+    String? formError;
+    bool isSubmitting = false;
+
+    final actions = [
+      'Written Warning & Reprimand',
+      'Corrective Guidance & Restorative Counseling',
+      '1-3 Day Campus Disciplinary Suspension',
+      'Mandatory Campus Community Service',
+      'Parent-Student Disciplinary Contract',
+      'Other Official Disciplinary Sanction',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.gavel, color: Color(0xFF16A34A)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stage 3: Resolve Case (OSD & Principal)',
+                      style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'OSD and Principal joint determination of disciplinary action and case resolution.',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      value: selectedAction,
+                      decoration: _dialogInputDecoration('Imposed Disciplinary Action *'),
+                      items: actions.map((a) => DropdownMenuItem(value: a, child: Text(a, style: const TextStyle(fontSize: 13)))).toList(),
+                      onChanged: (v) => setDialogState(() => selectedAction = v ?? selectedAction),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 4,
+                      decoration: _dialogInputDecoration('Official Joint Findings & Decision Notes *'),
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(formError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final notes = notesController.text.trim();
+                          if (notes.isEmpty) {
+                            setDialogState(() => formError = 'Please record the official joint findings and decision notes.');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            formError = null;
+                          });
+                          try {
+                            await _db.resolveCaseOsdAndPrincipal(
+                              reportId: widget.reportId,
+                              disciplineAction: selectedAction,
+                              notes: notes,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Case successfully resolved with official disciplinary action.'),
+                                backgroundColor: Color(0xFF16A34A),
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              formError = 'Resolution failed: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Record & Resolve'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // STAGE 3: Escalate to Board of Discipline
+  void _showEscalateToBoardDialog(ReportModel report) {
+    final reasonController = TextEditingController();
+    final notesController = TextEditingController();
+    String? formError;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.account_balance, color: Color(0xFF9333EA)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stage 3: Escalate to Board of Discipline',
+                      style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'When OSD and Principal determine that an incident cannot be resolved or requires formal institutional tribunal proceedings, escalate the case to the Board of Discipline.',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: reasonController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 2,
+                      decoration: _dialogInputDecoration('Reason for Escalation to Board *'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 3,
+                      decoration: _dialogInputDecoration('Summary of Previous Investigations & Evidence (Optional)'),
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(formError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final reason = reasonController.text.trim();
+                          if (reason.isEmpty) {
+                            setDialogState(() => formError = 'Please specify the reason for escalating to the Board of Discipline.');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            formError = null;
+                          });
+                          try {
+                            await _db.escalateToBoardOfDiscipline(
+                              reportId: widget.reportId,
+                              reason: reason,
+                              notes: notesController.text.trim().isNotEmpty ? notesController.text.trim() : null,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Case successfully escalated to the Board of Discipline.'),
+                                backgroundColor: Color(0xFF9333EA),
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              formError = 'Escalation failed: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF9333EA),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Escalate to Board'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // STAGE 4: Board of Discipline Final Deliberation & Punishment
+  void _showBoardDecisionDialog(ReportModel report) {
+    String selectedPunishment = 'Extended Suspension (5-10 Days)';
+    final findingsController = TextEditingController();
+    final decisionController = TextEditingController(text: 'Guilty of violation pursuant to School Child Protection and Anti-Bullying Policy.');
+    String? formError;
+    bool isSubmitting = false;
+
+    final punishments = [
+      'Extended Suspension (5-10 Days)',
+      'Formal Disciplinary Probation with Community Restitution',
+      'Exclusion from Extra-Curricular Activities & Class Disciplinary Transfer',
+      'Mandatory Psychological Counseling & Corrective Supervision',
+      'Recommendation for Expulsion (Subject to DepEd Review)',
+      'Other Institutional Disciplinary Punishment',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.balance, color: Color(0xFFD97706)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stage 4: Board Deliberation & Punishment',
+                      style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Board of Discipline conducts formal deliberation, renders decision, and determines the imposed punishment, then forwards to the School President.',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: findingsController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 3,
+                      decoration: _dialogInputDecoration('Board Findings & Deliberation Record *'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: decisionController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 2,
+                      decoration: _dialogInputDecoration('Formal Board Decision *'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedPunishment,
+                      decoration: _dialogInputDecoration('Imposed Punishment *'),
+                      items: punishments.map((p) => DropdownMenuItem(value: p, child: Text(p, style: const TextStyle(fontSize: 12)))).toList(),
+                      onChanged: (v) => setDialogState(() => selectedPunishment = v ?? selectedPunishment),
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(formError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final findings = findingsController.text.trim();
+                          final decision = decisionController.text.trim();
+                          if (findings.isEmpty || decision.isEmpty) {
+                            setDialogState(() => formError = 'Please record both the Board findings and formal decision.');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            formError = null;
+                          });
+                          try {
+                            await _db.finalizeBoardDecisionAndForwardToPresident(
+                              reportId: widget.reportId,
+                              findings: findings,
+                              decision: decision,
+                              punishment: selectedPunishment,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Decision finalized and forwarded to School President for final review.'),
+                                backgroundColor: Color(0xFFD97706),
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              formError = 'Submission failed: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Finalize & Forward to President'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // STAGE 5: School President Final Review
+  void _showPresidentReviewDialog(ReportModel report) {
+    final remarksController = TextEditingController(text: 'Reviewed and affirmed. Final disciplinary disposition approved for institutional execution.');
+    String? formError;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: const [
+                  Icon(Icons.verified, color: Color(0xFF1E3A8A)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Stage 5: School President Final Review',
+                      style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Final Deliberation Summary for Executive Review',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF1E293B)),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Imposed Punishment: ${report.disciplineAction ?? "Determined by Board"}',
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Color(0xFFD97706)),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            report.disciplineNotes ?? 'No additional notes provided.',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF475569)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: remarksController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 3,
+                      decoration: _dialogInputDecoration('President Executive Remarks & Concurrence *'),
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(formError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final remarks = remarksController.text.trim();
+                          if (remarks.isEmpty) {
+                            setDialogState(() => formError = 'Please enter executive remarks before finalizing.');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            formError = null;
+                          });
+                          try {
+                            await _db.completePresidentReview(
+                              reportId: widget.reportId,
+                              remarks: remarks,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Executive review completed. Disciplinary case officially finalized.'),
+                                backgroundColor: Color(0xFF1E3A8A),
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              formError = 'Review completion failed: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E3A8A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Complete Final Review'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEscalateDialog() {
     final staff = _db.currentUser;
     if (staff == null) return;
 
-    try {
-      await _db.escalateReport(widget.reportId);
-      if (!mounted) return;
-      
-      String msg = 'Report successfully escalated.';
-      if (staff.role == UserRole.adviser) {
-        msg = 'Report successfully escalated to the School Principal.';
-      } else if (staff.role == UserRole.principal) {
-        msg = 'Report successfully escalated to the Ministrong Tagasubaybay.';
-      } else if (staff.role == UserRole.ministrong_tagasubaybay) {
-        msg = 'Report successfully escalated to the Office of Student Discipline (OSD).';
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Escalation failed: $e')),
-      );
+    String title = 'Escalate Case';
+    String targetLabel = 'School Principal';
+    if (staff.role == UserRole.adviser) {
+      title = 'Escalate to Principal';
+      targetLabel = 'School Principal';
+    } else if (staff.role == UserRole.principal) {
+      title = 'Escalate to Ministrong Tagasubaybay';
+      targetLabel = 'Ministrong Tagasubaybay';
+    } else if (staff.role == UserRole.ministrong_tagasubaybay) {
+      title = 'Escalate to OSD';
+      targetLabel = 'Office of Student Discipline (OSD)';
     }
+
+    final reasonController = TextEditingController();
+    final notesController = TextEditingController();
+    String? formError;
+    bool isEscalating = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: Row(
+                children: [
+                  const Icon(Icons.arrow_upward, color: Color(0xFFEA580C)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 17),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Escalate this incident to $targetLabel for official institutional intervention and protective oversight.',
+                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: reasonController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 2,
+                      decoration: _dialogInputDecoration('Reason for Escalation *'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      maxLines: 3,
+                      decoration: _dialogInputDecoration('Supporting Notes / History (Optional)'),
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(formError!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isEscalating ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+                ElevatedButton(
+                  onPressed: isEscalating
+                      ? null
+                      : () async {
+                          final reason = reasonController.text.trim();
+                          if (reason.isEmpty) {
+                            setDialogState(() {
+                              formError = 'Please state the specific reason for escalation.';
+                            });
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isEscalating = true;
+                            formError = null;
+                          });
+
+                          try {
+                            await _db.escalateReport(
+                              reportId: widget.reportId,
+                              reason: reason,
+                              notes: notesController.text.trim().isNotEmpty ? notesController.text.trim() : null,
+                            );
+
+                            if (!mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Case successfully escalated to $targetLabel.')),
+                            );
+                          } catch (e) {
+                            setDialogState(() {
+                              isEscalating = false;
+                              formError = 'Escalation failed: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEA580C),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isEscalating
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Confirm Escalation'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showAddNoteDialog() {
@@ -1233,9 +2346,42 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
     final timelineEvents = _db.getTimelineEvents(report.id);
     final bool isMobile = MediaQuery.of(context).size.width < 700;
 
+    final statusLower = report.status.toLowerCase();
+    final isResolved = statusLower == 'resolved' || statusLower == 'closed';
+    final isWithMinistro = statusLower.contains('ministro');
+    final isWithOSD = statusLower.contains('osd');
+    final isWithBoard = statusLower.contains('board');
+
+    // Escalation capabilities by role
+    final canAdviserEscalate = staff.role == UserRole.adviser &&
+        !isResolved &&
+        !statusLower.contains('principal') &&
+        !isWithMinistro &&
+        !isWithOSD;
+
+    final canPrincipalEscalate = staff.role == UserRole.principal &&
+        !isResolved &&
+        !isWithMinistro &&
+        !isWithOSD;
+
+    final canMinistroEscalate = staff.role == UserRole.ministrong_tagasubaybay &&
+        !isResolved &&
+        !isWithOSD &&
+        !isWithBoard;
+
     final Widget leftPane = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // 5-Stage Workflow Stepper
+        _build5StageStepper(report),
+
+        // Automatic Grade-Level Personnel Assignments
+        _buildGradeAssignmentsCard(report),
+
+        // Anonymous Report Notice (Identity Protected)
+        if (report.isAnonymous)
+          _buildAnonymousNotice(),
+
         // Overview Card
         _buildCard(
           padding: const EdgeInsets.all(16.0),
@@ -1479,8 +2625,8 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (report.status != 'resolved' && report.status != 'closed') ...[
-                // Schedule Button
+              // Schedule Meeting Button (available before case resolution)
+              if (!isResolved) ...[
                 ElevatedButton.icon(
                   onPressed: _showScheduleMeetingDialog,
                   style: ElevatedButton.styleFrom(
@@ -1494,51 +2640,223 @@ class _StaffReportDetailScreenState extends State<StaffReportDetailScreen> {
                   label: const Text('Schedule Coordination Meeting', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
                 const SizedBox(height: 10),
-
-                // Resolve Button
-                if (staff.role != UserRole.adviser) ...[
-                  ElevatedButton.icon(
-                    onPressed: _showResolveCaseDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF16A34A),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    icon: const Icon(Icons.check_circle_outline, size: 18),
-                    label: const Text('Resolve Incident Case', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
-                  const SizedBox(height: 10),
-                ],
               ],
 
-              // Escalate Button (if allowed)
-              if ((staff.role == UserRole.adviser && report.status == 'Pending') ||
-                  (staff.role == UserRole.principal && report.status == 'Escalated to Principal') ||
-                  (staff.role == UserRole.ministrong_tagasubaybay && report.status == 'Escalated to Ministrong')) ...[
-                ElevatedButton.icon(
-                  onPressed: _showEscalateDialog,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEA580C),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              // --- 5-STAGE WORKFLOW ACTION CONTROLS ---
+              if (!isResolved) ...[
+                // STAGE 1: OSD Initial Assessment
+                if (report.stageNumber == 1) ...[
+                  if (staff.role == UserRole.osd) ...[
+                    ElevatedButton.icon(
+                      onPressed: () => _showForwardForInitialInterventionDialog(report!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.forward_to_inbox, size: 18),
+                      label: const Text('Forward for Initial Intervention', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: const Text(
+                        'Stage 1: Awaiting OSD Initial Assessment and Referral to Ministrong Tagasubaybay & Section Adviser.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF1E40AF), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+
+                // STAGE 2: Ministrong Tagasubaybay & Section Adviser Joint Intervention
+                if (report.stageNumber == 2) ...[
+                  if (staff.role == UserRole.ministrong_tagasubaybay || staff.role == UserRole.adviser) ...[
+                    ElevatedButton.icon(
+                      onPressed: () => _showResolveInitialInterventionDialog(report!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('Resolve Case (Intervention Successful)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showEscalateToOsdAndPrincipalDialog(report!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEA580C),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.arrow_upward, size: 18),
+                      label: const Text('Escalate to OSD and Principal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDFA),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF99F6E4)),
+                      ),
+                      child: const Text(
+                        'Stage 2: Joint Intervention actively handled by Ministrong Tagasubaybay and Section Adviser.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF0F766E), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+
+                // STAGE 3: OSD & Principal Joint Intervention
+                if (report.stageNumber == 3) ...[
+                  if (staff.role == UserRole.osd || staff.role == UserRole.principal) ...[
+                    ElevatedButton.icon(
+                      onPressed: () => _showResolveOsdAndPrincipalDialog(report!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.gavel, size: 18),
+                      label: const Text('Resolve & Impose Disciplinary Action', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showEscalateToBoardDialog(report!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF9333EA),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.account_balance, size: 18),
+                      label: const Text('Escalate to Board of Discipline', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: const Text(
+                        'Stage 3: Joint Intervention actively handled by OSD and Principal.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF92400E), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+
+                // STAGE 4: Board of Discipline Deliberation & Punishment
+                if (report.stageNumber == 4) ...[
+                  if (staff.role == UserRole.board_of_discipline) ...[
+                    ElevatedButton.icon(
+                      onPressed: () => _showBoardDecisionDialog(report!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD97706),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.balance, size: 18),
+                      label: const Text('Finalize Board Decision & Punishment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFDF4FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFF0ABFC)),
+                      ),
+                      child: const Text(
+                        'Stage 4: Formal deliberation & punishment determination by the Board of Discipline.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF86198F), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+
+                // STAGE 5: School President Final Review
+                if (report.stageNumber == 5) ...[
+                  if (staff.role == UserRole.school_president) ...[
+                    ElevatedButton.icon(
+                      onPressed: () => _showPresidentReviewDialog(report!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E3A8A),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.verified, size: 18),
+                      label: const Text('Complete President Final Review', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 10),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: const Text(
+                        'Stage 5: Board punishment determined. Awaiting School President final review.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF1E40AF), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
                   ),
-                  icon: const Icon(Icons.arrow_upward, size: 18),
-                  label: Text(
-                    staff.role == UserRole.adviser
-                        ? 'Escalate to Principal'
-                        : staff.role == UserRole.principal
-                            ? 'Escalate to Ministrong'
-                            : 'Forward to OSD Officer',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Disciplinary Proceedings Complete / Resolved',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF166534)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 10),
               ],
-
               // Add Note Button
               OutlinedButton.icon(
                 onPressed: _showAddNoteDialog,

@@ -550,10 +550,13 @@ class _ParentDashboardState extends State<ParentDashboard> {
 
     final activeChild = _db.selectedChild;
 
-    // Filter reports for selected child
+    // Filter reports for selected child (both victim and alleged bully involvement)
     final allReports = _db.getReports().where((r) {
       if (activeChild == null) return false;
-      return r.studentName.toLowerCase() == activeChild.name.toLowerCase();
+      final childName = activeChild.name.trim().toLowerCase();
+      final isVictim = r.studentName.trim().toLowerCase() == childName;
+      final isOffender = r.bullyName != null && r.bullyName!.trim().toLowerCase() == childName;
+      return isVictim || isOffender;
     }).toList();
 
     final activeReports = allReports.where((r) => r.status.toLowerCase() != 'resolved' && r.status.toLowerCase() != 'closed').toList();
@@ -834,33 +837,113 @@ class _ParentDashboardState extends State<ParentDashboard> {
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Builder(
+                builder: (context) {
+                  final childName = _db.selectedChild?.name.trim().toLowerCase() ?? '';
+                  final isVictim = report.studentName.trim().toLowerCase() == childName;
+                  final isOffender = report.bullyName != null && report.bullyName!.trim().toLowerCase() == childName;
+                  final isAdviserReported = report.reportSource == 'Adviser-Observed';
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      StatusBadge(status: report.status),
-                      Text(
-                        report.createdAt.toLocal().toString().substring(0, 10),
-                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                      // Role & Status Row
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          StatusBadge(status: report.status),
+                          if (isOffender)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.shield_outlined, size: 12, color: Color(0xFFD97706)),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Child Named as Alleged Offender (Inquiry)',
+                                    style: TextStyle(color: Color(0xFFB45309), fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (isVictim)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Child Involved (Complainant / Subject)',
+                                style: TextStyle(color: Color(0xFF1D4ED8), fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          if (isAdviserReported)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Reported by Adviser',
+                                style: TextStyle(color: Color(0xFF15803D), fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    report.title,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    report.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.4),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(color: Color(0xFFE2E8F0), height: 1),
+                      const SizedBox(height: 10),
+                      Text(
+                        report.title,
+                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        report.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.4),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.person, size: 14, color: Color(0xFF2563EB)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Victim: ${report.studentName}',
+                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 12),
+                            const Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFD97706)),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'Bully: ${report.bullyName ?? "Not named"}',
+                                style: const TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Divider(color: Color(0xFFE2E8F0), height: 1),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -888,7 +971,9 @@ class _ParentDashboardState extends State<ParentDashboard> {
                     ],
                   ),
                 ],
-              ),
+              );
+            },
+          ),
             ),
           ),
         );
