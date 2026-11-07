@@ -89,6 +89,30 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // DepEd Child Protection Safeguard Notice
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.shield_outlined, size: 18, color: Color(0xFF2563EB)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'DepEd Child Protection Safeguard (D.O. 40, s. 2012): Bullying allegations are officially subject to school inquiry and counseling. Personal privacy and confidential disciplinary records of non-involved parties are protected under the Data Privacy Act.',
+                          style: TextStyle(color: Color(0xFF475569), fontSize: 11, height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 // Top overview Card
                 Card(
                   child: Padding(
@@ -121,11 +145,19 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                           style: const TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 16),
+                        _metaRow(Icons.person_outline, 'Student Subject (Victim)', '${report.studentName} (${report.studentSection})'),
+                        const SizedBox(height: 8),
+                        _metaRow(Icons.warning_amber_outlined, 'Reported Bully / Offender', report.bullyName != null ? '${report.bullyName!} (${report.bullyGradeSection ?? ""})' : 'Not specified'),
+                        const SizedBox(height: 8),
                         _metaRow(Icons.category_outlined, 'Category', report.category),
                         const SizedBox(height: 8),
                         _metaRow(Icons.location_on_outlined, 'Location', report.incidentLocation),
                         const SizedBox(height: 8),
                         _metaRow(Icons.calendar_today_outlined, 'Incident Date', report.incidentDate.toLocal().toString().substring(0, 16)),
+                        if (report.reportSource == 'Adviser-Observed') ...[
+                          const SizedBox(height: 8),
+                          _metaRow(Icons.badge_outlined, 'Report Filed By', 'Adviser: ${report.reporterName ?? "Section Faculty"}'),
+                        ],
                         const SizedBox(height: 16),
                         const Divider(color: Color(0xFFE2E8F0)),
                         const SizedBox(height: 12),
@@ -141,63 +173,50 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Bully & Witnesses Card
-                if (report.bullyName != null || (report.witnesses != null && report.witnesses!.isNotEmpty)) ...[
-                  const Text('Alleged Bully & Witnesses', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
+                // Escalation History & Investigation Progress
+                if (report.status.toLowerCase().contains('escalat') || report.escalatedTo != null) ...[
+                  const Text('Investigation Progress & Escalation', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Card(
+                    color: const Color(0xFFFFFBEB),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Color(0xFFFDE68A)),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (report.bullyName != null) ...[
-                            Row(
-                              children: [
-                                const Icon(Icons.person_outline, color: Color(0xFF2563EB), size: 18),
-                                const SizedBox(width: 8),
-                                const Text('Alleged Bully: ', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                Text(
-                                  report.bullyName!,
-                                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold),
-                                ),
-                                if (report.bullyGradeSection != null) ...[
-                                  Text(
-                                    ' (${report.bullyGradeSection})',
-                                    style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (report.witnesses != null && report.witnesses!.isNotEmpty)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 8.0),
-                                child: Divider(color: Color(0xFFE2E8F0)),
+                          Row(
+                            children: [
+                              const Icon(Icons.arrow_upward_outlined, color: Color(0xFFD97706), size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Current Stage: ${report.status}',
+                                style: const TextStyle(color: Color(0xFFB45309), fontSize: 13, fontWeight: FontWeight.bold),
                               ),
+                            ],
+                          ),
+                          if (report.escalatedTo != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Assigned Authority: ${report.escalatedTo}',
+                              style: const TextStyle(color: Color(0xFF78350F), fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
                           ],
-                          if (report.witnesses != null && report.witnesses!.isNotEmpty) ...[
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.people_outline, color: Color(0xFF2563EB), size: 18),
-                                const SizedBox(width: 8),
-                                const Text('Witnesses: ', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: report.witnesses!
-                                        .map((w) => Padding(
-                                              padding: const EdgeInsets.only(bottom: 4.0),
-                                              child: Text(
-                                                w,
-                                                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold),
-                                              ),
-                                            ))
-                                        .toList(),
-                                  ),
-                                ),
-                              ],
+                          if (report.escalationReason != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Reason for Escalation: ${report.escalationReason}',
+                              style: const TextStyle(color: Color(0xFF78350F), fontSize: 12),
+                            ),
+                          ],
+                          if (report.escalationNotes != null && report.escalationNotes!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Notes: ${report.escalationNotes}',
+                              style: const TextStyle(color: Color(0xFF78350F), fontSize: 12),
                             ),
                           ],
                         ],
@@ -206,6 +225,201 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   ),
                   const SizedBox(height: 20),
                 ],
+
+                // Involved Students Section (Victim & Alleged Bully)
+                const Text(
+                  'Involved Students (Biktima at Alleged Offender)',
+                  style: TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+
+                // 1. Prominent Victim Card
+                Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.person, color: Color(0xFF2563EB), size: 22),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'REPORTED VICTIM / SUBJECT',
+                                        style: TextStyle(
+                                          color: Color(0xFF1D4ED8),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEFF6FF),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                                        ),
+                                        child: const Text(
+                                          'Biktima',
+                                          style: TextStyle(color: Color(0xFF1D4ED8), fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    report.studentName.isNotEmpty ? report.studentName : 'Student',
+                                    style: const TextStyle(
+                                      color: Color(0xFF0F172A),
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${report.studentGrade.isNotEmpty ? "${report.studentGrade} · " : ""}${report.studentSection}',
+                                    style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // 2. Prominent Bully & Witnesses Card
+                Card(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Color(0xFFFDE68A)),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 22),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'REPORTED BULLY / ALLEGED OFFENDER',
+                                        style: TextStyle(
+                                          color: Color(0xFFB45309),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFEF3C7),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: const Color(0xFFFDE68A)),
+                                        ),
+                                        child: const Text(
+                                          'Inquiry',
+                                          style: TextStyle(color: Color(0xFFB45309), fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    report.bullyName != null && report.bullyName!.isNotEmpty
+                                        ? report.bullyName!
+                                        : 'Not explicitly named in report',
+                                    style: const TextStyle(
+                                      color: Color(0xFF0F172A),
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (report.bullyGradeSection != null && report.bullyGradeSection!.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      report.bullyGradeSection!,
+                                      style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (report.witnesses != null && report.witnesses!.isNotEmpty) ...[
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12.0),
+                            child: Divider(color: Color(0xFFFDE68A)),
+                          ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.people_outline, color: Color(0xFFB45309), size: 16),
+                              const SizedBox(width: 8),
+                              const Text('Witnesses: ', style: TextStyle(color: Color(0xFFB45309), fontSize: 12, fontWeight: FontWeight.w600)),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  report.witnesses!.join(', '),
+                                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
 
                 // Meetings Card
                 if (meetings.isNotEmpty) ...[
@@ -296,9 +510,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // Disciplinary Outcomes (If Resolved)
-                if (report.status.toLowerCase() == 'resolved' || report.status.toLowerCase() == 'closed') ...[
-                  const Text('Disciplinary Resolution Details', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
+                // Disciplinary Outcomes (If officially recorded or Resolved)
+                if (report.status.toLowerCase() == 'resolved' || report.status.toLowerCase() == 'closed' || report.disciplineAction != null || report.disciplineNotes != null) ...[
+                  const Text('Disciplinary Measures & Actions Taken', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Card(
                     child: Padding(
@@ -330,32 +544,34 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          const Text('Action Notes:', style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold)),
+                          const Text('Official Action Notes:', style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text(
-                            report.disciplineNotes ?? 'No additional notes provided.',
+                            report.disciplineNotes ?? 'Inquiry and guidance counseling in progress.',
                             style: const TextStyle(color: Color(0xFF334155), fontSize: 12, height: 1.4),
                           ),
-                          const SizedBox(height: 16),
-                          const Divider(color: Color(0xFFE2E8F0)),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'If you disagree with this resolution outcome, you can appeal the case to reopen the investigation.',
-                            style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: () => _showReAppealSheet(report!),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE11D48),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          if (report.status.toLowerCase() == 'resolved' || report.status.toLowerCase() == 'closed') ...[
+                            const SizedBox(height: 16),
+                            const Divider(color: Color(0xFFE2E8F0)),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'If you disagree with this resolution outcome, you can appeal the case to reopen the investigation.',
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
                             ),
-                            icon: const Icon(Icons.replay_outlined, size: 18),
-                            label: const Text('Re-Appeal Resolved Case', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: () => _showReAppealSheet(report!),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE11D48),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              icon: const Icon(Icons.replay_outlined, size: 18),
+                              label: const Text('Re-Appeal Resolved Case', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                          ],
                         ],
                       ),
                     ),
