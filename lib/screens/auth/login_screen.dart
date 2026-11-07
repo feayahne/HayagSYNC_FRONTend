@@ -5,6 +5,7 @@ import '../parent/parent_dashboard.dart';
 import '../staff/staff_dashboard.dart';
 import 'register_screen.dart';
 import 'terms_screen.dart';
+import 'anonymous_report_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -317,6 +318,70 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ],
+                            ),
+
+                            const SizedBox(height: 24),
+                            const Divider(color: Color(0xFFE2E8F0)),
+                            const SizedBox(height: 16),
+
+                            // Anonymous Reporting (No Account Required)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: const [
+                                      Icon(Icons.shield_outlined, color: Color(0xFF16A34A), size: 18),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Need to report anonymously?',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Color(0xFF166534),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Anyone can submit an incident report without creating an account or logging in.',
+                                    style: TextStyle(fontSize: 12, color: Color(0xFF15803D)),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(builder: (_) => const AnonymousReportScreen()),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.send_rounded, size: 16),
+                                      label: const Text(
+                                        'Submit Anonymous Report',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF166534),
+                                        backgroundColor: Colors.white,
+                                        side: const BorderSide(color: Color(0xFF16A34A)),
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
