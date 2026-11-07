@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../services/database_service.dart';
 import '../../services/ai_service.dart';
 import '../../models/student_model.dart';
+import '../../models/user_model.dart';
 import '../../widgets/glass_panel.dart';
 
 class AdviserSubmitReportScreen extends StatefulWidget {
@@ -79,104 +80,56 @@ class _AdviserSubmitReportScreenState extends State<AdviserSubmitReportScreen> {
     'Other Location',
   ];
 
-  // Comprehensive master roster linking fake/pre-seeded students to active parent accounts
-  final List<StudentModel> _masterPreseededStudents = [
-    // Grade 7
-    StudentModel(id: 'st_7_1', parentId: 'p_7_1', name: 'Sophia Mahogany', grade: 'Grade 7', section: 'Grade 7 - Mahogany', academicYear: '2025-2026'),
-    StudentModel(id: 'st_7_2', parentId: 'p_7_2', name: 'Ethan Santos', grade: 'Grade 7', section: 'Grade 7 - Mahogany', academicYear: '2025-2026'),
-    StudentModel(id: 'st_7_3', parentId: 'p_7_3', name: 'Mateo Narra', grade: 'Grade 7', section: 'Grade 7 - Narra', academicYear: '2025-2026'),
-    StudentModel(id: 'st_7_4', parentId: 'p_7_4', name: 'Isabella Cruz', grade: 'Grade 7', section: 'Grade 7 - Narra', academicYear: '2025-2026'),
-    
-    // Grade 8
-    StudentModel(id: 'st_8_1', parentId: 'p_8_1', name: 'Noah Uranus', grade: 'Grade 8', section: 'Grade 8 - Uranus', academicYear: '2025-2026'),
-    StudentModel(id: 'st_8_2', parentId: 'p_8_2', name: 'Emma Garcia', grade: 'Grade 8', section: 'Grade 8 - Uranus', academicYear: '2025-2026'),
-    StudentModel(id: 'st_8_3', parentId: 'p_8_3', name: 'Oliver Venus', grade: 'Grade 8', section: 'Grade 8 - Venus', academicYear: '2025-2026'),
-    StudentModel(id: 'st_8_4', parentId: 'p_8_4', name: 'Ava Mendoza', grade: 'Grade 8', section: 'Grade 8 - Venus', academicYear: '2025-2026'),
-
-    // Grade 9
-    StudentModel(id: 'st_9_1', parentId: 'p_9_1', name: 'Lucas Eagle', grade: 'Grade 9', section: 'Grade 9 - Eagle', academicYear: '2025-2026'),
-    StudentModel(id: 'st_9_2', parentId: 'p_9_2', name: 'Mia Ramos', grade: 'Grade 9', section: 'Grade 9 - Eagle', academicYear: '2025-2026'),
-    StudentModel(id: 'st_9_3', parentId: 'p_9_3', name: 'Benjamin Falcon', grade: 'Grade 9', section: 'Grade 9 - Falcon', academicYear: '2025-2026'),
-    StudentModel(id: 'st_9_4', parentId: 'p_9_4', name: 'Charlotte Torres', grade: 'Grade 9', section: 'Grade 9 - Falcon', academicYear: '2025-2026'),
-
-    // Grade 10
-    StudentModel(id: 'st_10_1', parentId: 'p_10_1', name: 'Elijah Rizal', grade: 'Grade 10', section: 'Grade 10 - Rizal', academicYear: '2025-2026'),
-    StudentModel(id: 'st_10_2', parentId: 'p_10_2', name: 'Amelia Flores', grade: 'Grade 10', section: 'Grade 10 - Rizal', academicYear: '2025-2026'),
-    StudentModel(id: 'st_10_3', parentId: 'p_10_3', name: 'Jisung Park', grade: 'Grade 10', section: 'Grade 10 - Bonifacio', academicYear: '2025-2026'),
-    StudentModel(id: 'st_10_4', parentId: 'p_10_4', name: 'James Bonifacio', grade: 'Grade 10', section: 'Grade 10 - Bonifacio', academicYear: '2025-2026'),
-    StudentModel(id: 'st_10_5', parentId: 'p_10_5', name: 'Jung Woo', grade: 'Grade 10', section: 'Grade 10 - Jupiter', academicYear: '2025-2026'),
-
-    // Grade 11
-    StudentModel(id: 'st_11_1', parentId: 'p_11_1', name: 'Juan Dela Cruz Jr.', grade: 'Grade 11', section: 'Grade 11 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_11_2', parentId: 'p_11_2', name: 'Chenle Zhong', grade: 'Grade 11', section: 'Grade 11 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_11_3', parentId: 'p_11_3', name: 'Coles, Kyle Pring', grade: 'Grade 11', section: 'Grade 11 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_11_4', parentId: 'p_11_4', name: 'Alexander Abm', grade: 'Grade 11', section: 'Grade 11 - ABM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_11_5', parentId: 'p_11_5', name: 'Evelyn Castillo', grade: 'Grade 11', section: 'Grade 11 - ABM A', academicYear: '2025-2026'),
-
-    // Grade 12
-    StudentModel(id: 'st_12_1', parentId: 'p_12_1', name: 'Jaemin Na', grade: 'Grade 12', section: 'Grade 12 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_12_2', parentId: 'p_12_2', name: 'Jeno Lee', grade: 'Grade 12', section: 'Grade 12 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_12_3', parentId: 'p_12_3', name: 'Huang Renjun', grade: 'Grade 12', section: 'Grade 12 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_12_4', parentId: 'p_12_4', name: 'Haechan Lee', grade: 'Grade 12', section: 'Grade 12 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_12_5', parentId: 'p_12_5', name: 'Jung Jaehyun', grade: 'Grade 12', section: 'Grade 12 - STEM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_12_6', parentId: 'p_12_6', name: 'Daniel Abm12', grade: 'Grade 12', section: 'Grade 12 - ABM A', academicYear: '2025-2026'),
-    StudentModel(id: 'st_12_7', parentId: 'p_12_7', name: 'Sofia Dela Rosa', grade: 'Grade 12', section: 'Grade 12 - ABM A', academicYear: '2025-2026'),
-  ];
-
   @override
   void initState() {
     super.initState();
     _loadAllStudents();
   }
 
-  void _loadAllStudents() {
+  void _loadAllStudents() async {
     final staff = _db.currentUser;
-    final defaultSection = staff?.assignedSection ?? 'Grade 11 - STEM A';
+    final isAdviser = staff?.role == UserRole.adviser;
+    final defaultSection = staff?.assignedSection ?? 'Grade 7 - Mahogany';
 
-    // Merge system DB students with master pre-seeded students
-    final allParents = _db.getParentsList();
-    final systemList = <StudentModel>[];
-    for (final parent in allParents) {
-      if (parent.students != null) {
-        systemList.addAll(parent.students!);
-      }
+    // Fetch roster directly from DatabaseService
+    List<StudentModel> studentsList = _db.getStudents();
+    if (studentsList.isEmpty) {
+      await _db.syncData();
+      studentsList = _db.getStudents();
     }
 
-    final Map<String, StudentModel> mergedMap = {};
-    for (final st in _masterPreseededStudents) {
-      mergedMap[st.name.toLowerCase()] = st;
+    if (mounted) {
+      setState(() {
+        _allSystemStudents = studentsList;
+        _selectedSection = (isAdviser && staff?.assignedSection != null && staff!.assignedSection!.isNotEmpty)
+            ? staff.assignedSection!
+            : (_allSections.contains(defaultSection) ? defaultSection : _allSections.first);
+        _updateSectionFilter(_selectedSection);
+      });
     }
-    for (final st in systemList) {
-      mergedMap[st.name.toLowerCase()] = st;
-    }
-
-    setState(() {
-      _allSystemStudents = mergedMap.values.toList();
-      _selectedSection = _allSections.contains(defaultSection) ? defaultSection : _allSections.first;
-      _updateSectionFilter(_selectedSection);
-    });
   }
 
   void _updateSectionFilter(String sectionName) {
     // Extract Grade
     final gradeMatch = RegExp(r'(Grade\s*\d+)', caseSensitive: false).firstMatch(sectionName);
-    final grade = gradeMatch != null ? gradeMatch.group(1)! : 'Grade 11';
+    final grade = gradeMatch != null ? gradeMatch.group(1)! : 'Grade 7';
 
-    // Filter students matching selected section
-    final sectionNorm = sectionName.toLowerCase().replaceAll(' ', '').replaceAll('-', '');
+    // Filter students strictly matching the selected section
     final filtered = _allSystemStudents.where((st) {
-      final stNorm = st.section.toLowerCase().replaceAll(' ', '').replaceAll('-', '');
-      return stNorm.contains(sectionNorm) || sectionNorm.contains(stNorm);
+      return DatabaseService.isSectionMatch(st.section, sectionName);
     }).toList();
 
     setState(() {
       _selectedSection = sectionName;
       _selectedGrade = grade;
-      _filteredSectionStudents = filtered.isNotEmpty ? filtered : _allSystemStudents;
+      _filteredSectionStudents = filtered;
 
       if (_filteredSectionStudents.isNotEmpty) {
         _selectedStudent = _filteredSectionStudents.first;
         _studentNameController.text = _selectedStudent!.name;
+      } else {
+        _selectedStudent = null;
+        _studentNameController.clear();
       }
     });
   }
@@ -443,64 +396,140 @@ class _AdviserSubmitReportScreenState extends State<AdviserSubmitReportScreen> {
                         ),
                         const Divider(height: 24),
 
-                        // Section Dropdown Selector
+                        // Section Selection
                         const Text(
                           'Select Grade & Section *',
                           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                         ),
                         const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          value: _selectedSection,
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.class_outlined, color: Color(0xFF0F766E)),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
+                        if (staff?.role == UserRole.adviser)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDFA),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF99F6E4)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.shield_outlined, color: Color(0xFF0F766E), size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Assigned Homeroom Section (Authorized)',
+                                        style: TextStyle(color: Color(0xFF0F766E), fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(
+                                        _selectedSection,
+                                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0F766E),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'LOCKED',
+                                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          DropdownButtonFormField<String>(
+                            value: _selectedSection,
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.class_outlined, color: Color(0xFF0F766E)),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              filled: true,
+                              fillColor: Colors.grey.shade50,
+                            ),
+                            items: _allSections.map((sec) {
+                              return DropdownMenuItem(
+                                value: sec,
+                                child: Text(sec, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                _updateSectionFilter(val);
+                              }
+                            },
                           ),
-                          items: _allSections.map((sec) {
-                            return DropdownMenuItem(
-                              value: sec,
-                              child: Text(sec, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              _updateSectionFilter(val);
-                            }
-                          },
-                        ),
 
                         const SizedBox(height: 18),
 
                         // Student / Victim Dropdown Selector (Connected to Parents)
-                        const Text(
-                          'Select Victim / Involved Student (Linked Parent Profile) *',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Select Victim / Reported Student *',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                            Text(
+                              '${_filteredSectionStudents.length} Students in $_selectedSection',
+                              style: const TextStyle(color: Color(0xFF0F766E), fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 6),
-                        DropdownButtonFormField<StudentModel>(
-                          value: _filteredSectionStudents.contains(_selectedStudent) ? _selectedStudent : (_filteredSectionStudents.isNotEmpty ? _filteredSectionStudents.first : null),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.face, color: Color(0xFF0F766E)),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
+                        if (_filteredSectionStudents.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFFECACA)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline, color: Color(0xFFDC2626), size: 18),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'No enrolled students found in this section.',
+                                    style: TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          DropdownButtonFormField<StudentModel>(
+                            value: _filteredSectionStudents.contains(_selectedStudent)
+                                ? _selectedStudent
+                                : _filteredSectionStudents.first,
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.face, color: Color(0xFF0F766E)),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              filled: true,
+                              fillColor: Colors.grey.shade50,
+                            ),
+                            items: _filteredSectionStudents.map((st) {
+                              final lrnInfo = st.lrn != null ? ' (LRN: ${st.lrn})' : '';
+                              return DropdownMenuItem(
+                                value: st,
+                                child: Text('${st.name}$lrnInfo'),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedStudent = val;
+                                  _studentNameController.text = val.name;
+                                });
+                              }
+                            },
                           ),
-                          items: _filteredSectionStudents.map((st) {
-                            return DropdownMenuItem(
-                              value: st,
-                              child: Text('${st.name} (${st.section})'),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _selectedStudent = val;
-                                _studentNameController.text = val.name;
-                              });
-                            }
-                          },
-                        ),
 
                         const SizedBox(height: 18),
 
