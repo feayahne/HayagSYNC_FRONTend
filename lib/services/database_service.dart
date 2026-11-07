@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,7 +13,9 @@ class DatabaseService extends ChangeNotifier {
   // Singleton Pattern
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
-  DatabaseService._internal();
+  DatabaseService._internal() {
+    _startRealtimeSync();
+  }
 
   // Supabase Base URL
   static String baseUrl = 'https://pxwpdtnqkucgkrpumctg.supabase.co';
@@ -28,6 +31,17 @@ class DatabaseService extends ChangeNotifier {
   StudentModel? _selectedChild;
   StudentModel? get selectedChild => _selectedChild;
 
+  Timer? _realtimeTimer;
+
+  void _startRealtimeSync() {
+    _realtimeTimer?.cancel();
+    _realtimeTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_currentUser != null) {
+        syncData();
+      }
+    });
+  }
+
   void selectChild(StudentModel? child) {
     _selectedChild = child;
     notifyListeners();
@@ -39,9 +53,77 @@ class DatabaseService extends ChangeNotifier {
   final List<MeetingModel> _meetings = [];
   final List<ChatMessage> _messages = [];
   final List<TimelineEvent> _timelines = [];
+  final List<StudentModel> _students = [];
 
-  List<ReportModel> get reports => List.unmodifiable(_reports);
+  List<ReportModel> get reports => List.unmodifiable(getReports());
   List<MeetingModel> get meetings => List.unmodifiable(_meetings);
+  List<StudentModel> get students => List.unmodifiable(getStudents());
+
+  static bool isSectionMatch(String a, String b) {
+    if (a.isEmpty || b.isEmpty) return false;
+    final normA = a.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final normB = b.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (normA == normB) return true;
+    return normA.contains(normB) || normB.contains(normA);
+  }
+
+  // Automatic Grade-Level Assignments Helper
+  static Map<String, dynamic> determineGradeAssignments({
+    required String studentGrade,
+    required String studentSection,
+    String? bullyGradeSection,
+  }) {
+    final List<String> grades = [];
+    for (final text in [studentGrade, studentSection, bullyGradeSection ?? '']) {
+      final match = RegExp(r'Grade\s*(\d+)', caseSensitive: false).firstMatch(text);
+      if (match != null) {
+        final g = 'Grade ${match.group(1)}';
+        if (!grades.contains(g)) grades.add(g);
+      }
+    }
+    if (grades.isEmpty) {
+      grades.add('Grade 7');
+    }
+
+    final Map<String, String> ministroMap = {
+      'Grade 7': 'Gng. Corazon Alcantara (ministro.grade7@hayag.edu.ph)',
+      'Grade 8': 'G. Arnel Bautista (ministro.grade8@hayag.edu.ph)',
+      'Grade 9': 'Gng. Remedios Santos (ministro.grade9@hayag.edu.ph)',
+      'Grade 10': 'G. Danilo Cruz (ministro.grade10@hayag.edu.ph)',
+      'Grade 11': 'Gng. Jocelyn Reyes (ministro.grade11@hayag.edu.ph)',
+      'Grade 12': 'G. Fernando Garcia (ministro.grade12@hayag.edu.ph)',
+    };
+
+    final Map<String, String> osdMap = {
+      'Grade 7': 'G. Renato Dalisay (osd.grade7@hayag.edu.ph)',
+      'Grade 8': 'Gng. Teresa Mercado (osd.grade8@hayag.edu.ph)',
+      'Grade 9': 'G. Victor Navarro (osd.grade9@hayag.edu.ph)',
+      'Grade 10': 'Gng. Angela Pineda (osd.grade10@hayag.edu.ph)',
+      'Grade 11': 'G. Marco Valenzuela (osd.grade11@hayag.edu.ph)',
+      'Grade 12': 'Gng. Caridad Soriano (osd.grade12@hayag.edu.ph)',
+    };
+
+    final assignedMinistros = grades.map((g) => ministroMap[g] ?? 'Ministrong Tagasubaybay ($g)').toList();
+    final assignedOsds = grades.map((g) => osdMap[g] ?? 'OSD Officer ($g)').toList();
+
+    final hasJhs = grades.any((g) => ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'].contains(g));
+    final hasShs = grades.any((g) => ['Grade 11', 'Grade 12'].contains(g));
+
+    final List<String> assignedPrincipals = [];
+    if (hasJhs) assignedPrincipals.add('Dr. Alicia Magalong (JHS Principal, Grades 7–10)');
+    if (hasShs) assignedPrincipals.add('Dr. Evelyn Morales (SHS Principal, Grades 11–12)');
+
+    return {
+      'grades': grades,
+      'primaryGrade': grades.first,
+      'ministros': assignedMinistros,
+      'osds': assignedOsds,
+      'principals': assignedPrincipals,
+      'ministroName': assignedMinistros.join(' & '),
+      'osdName': assignedOsds.join(' & '),
+      'principalName': assignedPrincipals.join(' & '),
+    };
+  }
 
   List<String>? _parseWitnesses(dynamic raw) {
     if (raw == null) return null;
@@ -60,20 +142,32 @@ class DatabaseService extends ChangeNotifier {
   Future<void> syncData() async {
     if (_currentUser == null) return;
     try {
-      // 1. Fetch Reports
-      final reportsRes = await _supabase
-          .from('reports')
-          .select()
-          .order('id', ascending: false);
+      final role = _currentUser!.role;
+
+      // 1. Fetch Reports: All four initial handling roles (and Board/President) have access to ALL submitted reports
+      dynamic reportsRes;
+      try {
+        reportsRes = await _supabase
+            .from('reports')
+            .select()
+            .order('id', ascending: false);
+      } catch (err) {
+        debugPrint('Reports fetch error: $err');
+        return;
+      }
 
       _reports.clear();
       for (var item in reportsRes) {
+        final repSec = item['student_section']?.toString() ?? '';
+        final isAnon = (item['parent_name']?.toString().toLowerCase().contains('anonymous') ?? false) ||
+            (item['report_source']?.toString().toLowerCase().contains('anonymous') ?? false);
+
         _reports.add(ReportModel(
           id: item['id'].toString(),
           parentId: item['parent_id']?.toString() ?? '',
-          parentName: item['parent_name'] ?? 'Parent',
+          parentName: isAnon ? 'Anonymous Reporter' : (item['parent_name'] ?? 'Parent'),
           studentName: item['student_name'] ?? 'Student',
-          studentSection: item['student_section'] ?? '',
+          studentSection: repSec,
           studentGrade: item['student_grade'] ?? '',
           title: item['title'] ?? '',
           description: item['description'] ?? '',
@@ -93,14 +187,28 @@ class DatabaseService extends ChangeNotifier {
           bullyName: item['bully_name'],
           bullyGradeSection: item['bully_grade_section'],
           witnesses: _parseWitnesses(item['witnesses']),
-          reportSource: item['report_source'] ?? 'Parent-Reported',
+          reportSource: isAnon ? 'Anonymous' : (item['report_source'] ?? 'Parent-Reported'),
           reporterId: item['reporter_id']?.toString(),
-          reporterName: item['reporter_name'],
+          reporterName: isAnon ? 'Anonymous Reporter' : item['reporter_name'],
           urgencyLevel: item['urgency_level'] ?? 'Moderate',
+          escalationReason: item['escalation_reason'],
+          escalationNotes: item['escalation_notes'],
+          escalatedTo: item['escalated_to'],
         ));
       }
 
-      // 2. Fetch Directory if Staff
+      // 2. Fetch Students from database
+      _students.clear();
+      final studentsRes = await _supabase
+          .from('students')
+          .select()
+          .order('name');
+
+      for (var item in studentsRes) {
+        _students.add(StudentModel.fromJson(item));
+      }
+
+      // 3. Fetch Directory if Staff
       if (_currentUser != null && _currentUser!.role != UserRole.parent) {
         final dirRes = await _supabase
             .from('users')
@@ -154,6 +262,21 @@ class DatabaseService extends ChangeNotifier {
     }
 
     logLoginAttempt(userId: res['id']?.toString(), email: cleanEmail, success: true);
+
+    // If adviser has no assigned_section in users table, lookup from staff_section_assignments
+    if (res['role'] == 'adviser' && (res['assigned_section'] == null || res['assigned_section'].toString().isEmpty)) {
+      try {
+        final assignRes = await _supabase
+            .from('staff_section_assignments')
+            .select('sections(full_section_name, name, grade_level)')
+            .eq('staff_id', res['id'])
+            .eq('is_active', true)
+            .maybeSingle();
+        if (assignRes != null && assignRes['sections'] != null) {
+          res['assigned_section'] = assignRes['sections']['full_section_name'] ?? assignRes['sections']['name'];
+        }
+      } catch (_) {}
+    }
 
     _token = 'supabase_auth_${res['id']}';
     _currentUser = UserModel.fromJson(res);
@@ -257,6 +380,7 @@ class DatabaseService extends ChangeNotifier {
     _messages.clear();
     _timelines.clear();
     _users.clear();
+    _students.clear();
     notifyListeners();
   }
 
@@ -279,15 +403,52 @@ class DatabaseService extends ChangeNotifier {
   // --- REPORTING LIFECYCLE ---
 
   List<ReportModel> getReports() {
+    if (_currentUser?.role == UserRole.parent) {
+      final myId = _currentUser!.id;
+      final childNames = <String>[];
+      if (_currentUser?.studentName != null && _currentUser!.studentName!.isNotEmpty) {
+        childNames.add(_currentUser!.studentName!.toLowerCase());
+      }
+      if (_currentUser?.students != null) {
+        for (var s in _currentUser!.students!) {
+          childNames.add(s.name.toLowerCase());
+        }
+      }
+      return _reports.where((r) {
+        if (r.parentId == myId) return true;
+        final st = r.studentName.toLowerCase();
+        final bu = (r.bullyName ?? '').toLowerCase();
+        for (var c in childNames) {
+          if (c.isNotEmpty && (st.contains(c) || bu.contains(c))) return true;
+        }
+        return false;
+      }).toList();
+    }
+    // All four initial handling roles (Adviser, Ministrong, OSD, Principal) + Board + President have access to ALL submitted reports
     return _reports;
   }
 
   ReportModel? getReportById(String id) {
     try {
-      return _reports.firstWhere((r) => r.id == id);
+      final rep = _reports.firstWhere((r) => r.id == id);
+      return rep;
     } catch (_) {
       return null;
     }
+  }
+
+  List<StudentModel> getStudents({String? section}) {
+    if (_currentUser?.role == UserRole.adviser &&
+        _currentUser?.assignedSection != null &&
+        _currentUser!.assignedSection!.isNotEmpty) {
+      return _students
+          .where((s) => isSectionMatch(s.section, _currentUser!.assignedSection!))
+          .toList();
+    }
+    if (section != null && section.isNotEmpty) {
+      return _students.where((s) => isSectionMatch(s.section, section)).toList();
+    }
+    return _students;
   }
 
   Future<ReportModel> submitReport({
@@ -371,6 +532,101 @@ class DatabaseService extends ChangeNotifier {
     return newReport;
   }
 
+  Future<ReportModel> submitAnonymousReport({
+    required String title,
+    required String description,
+    required String category,
+    required DateTime incidentDate,
+    required String incidentLocation,
+    String? victimName,
+    String? victimGrade,
+    String? victimSection,
+    String? bullyName,
+    String? bullyGradeSection,
+    List<String>? witnesses,
+    required String urgencyLevel,
+    String? evidenceUrl,
+  }) async {
+    final studentDisplayName = (victimName != null && victimName.trim().isNotEmpty)
+        ? victimName.trim()
+        : 'Unidentified Student';
+    final studentGradeName = (victimGrade != null && victimGrade.trim().isNotEmpty)
+        ? victimGrade.trim()
+        : 'Grade 7';
+    final studentSectionName = (victimSection != null && victimSection.trim().isNotEmpty)
+        ? victimSection.trim()
+        : '$studentGradeName - Section To Be Determined';
+
+    final repData = {
+      'parent_id': null,
+      'parent_name': 'Anonymous Reporter',
+      'student_id': null,
+      'student_name': studentDisplayName,
+      'student_grade': studentGradeName,
+      'student_section': studentSectionName,
+      'title': title.trim().isNotEmpty ? title.trim() : 'Anonymous Bullying Report ($category)',
+      'description': description.trim(),
+      'category': category,
+      'incident_date': incidentDate.toIso8601String(),
+      'incident_location': incidentLocation,
+      'evidence_url': evidenceUrl,
+      'evidence_verification_state': 'Unverified',
+      'status': 'Pending',
+      'bully_name': bullyName?.trim(),
+      'bully_grade_section': bullyGradeSection?.trim(),
+      'witnesses': witnesses != null && witnesses.isNotEmpty ? json.encode(witnesses) : null,
+    };
+
+    final item = await _supabase.from('reports').insert(repData).select().single();
+
+    final newReport = ReportModel(
+      id: item['id'].toString(),
+      parentId: '',
+      parentName: 'Anonymous Reporter',
+      studentName: studentDisplayName,
+      studentSection: studentSectionName,
+      studentGrade: studentGradeName,
+      title: repData['title'].toString(),
+      description: description.trim(),
+      category: category,
+      incidentDate: incidentDate,
+      incidentLocation: incidentLocation,
+      evidenceUrl: evidenceUrl,
+      evidenceVerificationState: 'Unverified',
+      status: 'Pending',
+      createdAt: DateTime.parse(item['created_at']),
+      bullyName: bullyName?.trim(),
+      bullyGradeSection: bullyGradeSection?.trim(),
+      witnesses: witnesses,
+      reportSource: 'Anonymous',
+      reporterId: null,
+      reporterName: 'Anonymous Reporter',
+      urgencyLevel: urgencyLevel,
+    );
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': item['id'],
+      'title': 'Anonymous Report Submitted',
+      'description': 'Incident report submitted anonymously without user account. Case awaiting Stage 1: OSD Initial Assessment.',
+      'actor_name': 'Anonymous Reporter',
+      'actor_role': 'Anonymous',
+    });
+
+    try {
+      await _supabase.from('notifications').insert({
+        'recipient_role': 'osd',
+        'title': 'New Anonymous Report: Case #${item['id']}',
+        'message': 'A new report was submitted anonymously for $studentDisplayName ($category). Stage 1: OSD Initial Assessment required.',
+        'report_id': item['id'],
+      });
+    } catch (_) {}
+
+    _reports.insert(0, newReport);
+    notifyListeners();
+    syncData();
+    return newReport;
+  }
+
   Future<ReportModel> submitAdviserReport({
     required String title,
     required String description,
@@ -390,6 +646,16 @@ class DatabaseService extends ChangeNotifier {
     List<String>? witnesses,
     required String urgencyLevel,
   }) async {
+    // BACKEND AUTHORIZATION: Advisers can only submit reports for their assigned section
+    if (_currentUser?.role == UserRole.adviser) {
+      final assigned = _currentUser?.assignedSection ?? '';
+      if (assigned.isNotEmpty && !isSectionMatch(studentSection, assigned)) {
+        throw Exception(
+          'Security Authorization Error: Advisers are restricted to filing reports strictly within their assigned section ($assigned). Attempted: $studentSection'
+        );
+      }
+    }
+
     final repData = {
       'parent_id': null,
       'parent_name': 'Adviser: ${_currentUser?.name ?? "Section Adviser"}',
@@ -456,6 +722,13 @@ class DatabaseService extends ChangeNotifier {
   }
 
   List<UserModel> getParentsList() {
+    if (_currentUser?.role == UserRole.adviser &&
+        _currentUser?.assignedSection != null &&
+        _currentUser!.assignedSection!.isNotEmpty) {
+      return _users.values
+          .where((p) => isSectionMatch(p.studentSection ?? '', _currentUser!.assignedSection!))
+          .toList();
+    }
     return _users.values.toList();
   }
 
@@ -663,23 +936,508 @@ class DatabaseService extends ChangeNotifier {
     return newMsg;
   }
 
-  // --- ACTIONS ---
+  // --- 5-STAGE WORKFLOW ACTIONS ---
 
-  Future<void> escalateReport(String reportId) async {
+  // STAGE 1 -> STAGE 2: OSD Initial Assessment -> Forward to Ministrong Tagasubaybay & Section Adviser
+  Future<void> forwardForInitialIntervention({
+    required String reportId,
+    String? notes,
+  }) async {
     final repId = int.parse(reportId);
-    String targetAuthority = 'Principal';
-    if (_currentUser?.role == UserRole.principal) targetAuthority = 'Ministrong Tagasubaybay';
-    if (_currentUser?.role == UserRole.ministrong_tagasubaybay) targetAuthority = 'OSD';
+    const newStatus = 'Forwarded for Initial Intervention';
 
-    await _supabase.from('reports').update({'status': 'Escalated'}).eq('id', repId);
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        escalationNotes: notes,
+        escalatedTo: 'Ministrong Tagasubaybay & Section Adviser',
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Stage 1 Completed: Forwarded for Initial Intervention',
+        description: 'OSD completed initial assessment and forwarded case to assigned Ministrong Tagasubaybay and Section Adviser for joint intervention.${notes != null && notes.isNotEmpty ? " Assessment notes: $notes" : ""}',
+        actorName: _currentUser?.name ?? 'OSD Officer',
+        actorRole: 'OSD',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'escalation_notes': notes,
+        'escalated_to': 'Ministrong Tagasubaybay & Section Adviser',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {
+      await _supabase.from('reports').update({'status': newStatus}).eq('id', repId);
+    }
 
     await _supabase.from('timeline_events').insert({
       'report_id': repId,
-      'title': 'Case Escalated',
-      'description': 'Incident escalated to $targetAuthority by ${_currentUser?.name ?? "Staff"}.',
+      'title': 'Stage 1 Completed: Forwarded for Initial Intervention',
+      'description': 'OSD completed initial assessment and forwarded case to assigned Ministrong Tagasubaybay and Section Adviser for joint intervention.${notes != null && notes.isNotEmpty ? " Assessment notes: $notes" : ""}',
+      'actor_name': _currentUser?.name ?? 'OSD Officer',
+      'actor_role': 'OSD',
+    });
+
+    try {
+      await _supabase.from('notifications').insert({
+        'recipient_role': 'ministrong_tagasubaybay',
+        'title': 'Case #$repId Forwarded for Initial Intervention',
+        'message': 'OSD forwarded Case #$repId for joint initial intervention with Section Adviser.',
+        'report_id': repId,
+      });
+    } catch (_) {}
+
+    await syncData();
+  }
+
+  // STAGE 2 -> RESOLVED: Ministrong Tagasubaybay & Section Adviser resolve case
+  Future<void> resolveCaseInitialIntervention({
+    required String reportId,
+    required String restorativeAction,
+    required String notes,
+  }) async {
+    final repId = int.parse(reportId);
+    const newStatus = 'Resolved';
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        disciplineAction: restorativeAction,
+        disciplineNotes: notes,
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Stage 2 Completed: Case Resolved by Ministrong Tagasubaybay & Adviser',
+        description: 'Joint intervention successfully resolved the situation. Restorative Action: $restorativeAction. Agreement / Notes: $notes',
+        actorName: _currentUser?.name ?? 'Staff',
+        actorRole: _currentUser?.roleString ?? 'Staff',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'discipline_action': restorativeAction,
+        'discipline_notes': notes,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {}
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': repId,
+      'title': 'Stage 2 Completed: Case Resolved by Ministrong Tagasubaybay & Adviser',
+      'description': 'Joint intervention successfully resolved the situation. Restorative Action: $restorativeAction. Agreement / Notes: $notes',
       'actor_name': _currentUser?.name ?? 'Staff',
       'actor_role': _currentUser?.roleString ?? 'Staff',
     });
+
+    await syncData();
+  }
+
+  // STAGE 2 -> STAGE 3: Ministrong Tagasubaybay & Adviser escalate to OSD & Principal
+  Future<void> escalateToOsdAndPrincipal({
+    required String reportId,
+    required String reason,
+    String? notes,
+  }) async {
+    final repId = int.parse(reportId);
+    const newStatus = 'Escalated to OSD and Principal';
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        escalationReason: reason,
+        escalationNotes: notes,
+        escalatedTo: 'OSD and Principal',
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Stage 2 Escalation: Escalated to OSD and Principal',
+        description: 'Initial intervention could not manage or resolve the situation. Case escalated to OSD and Principal for joint higher intervention. Reason: $reason.${notes != null && notes.isNotEmpty ? " Notes: $notes" : ""}',
+        actorName: _currentUser?.name ?? 'Staff',
+        actorRole: _currentUser?.roleString ?? 'Staff',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'escalation_reason': reason,
+        'escalation_notes': notes,
+        'escalated_to': 'OSD and Principal',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {
+      await _supabase.from('reports').update({'status': newStatus}).eq('id', repId);
+    }
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': repId,
+      'title': 'Stage 2 Escalation: Escalated to OSD and Principal',
+      'description': 'Initial intervention could not manage or resolve the situation. Case escalated to OSD and Principal for joint higher intervention. Reason: $reason.${notes != null && notes.isNotEmpty ? " Notes: $notes" : ""}',
+      'actor_name': _currentUser?.name ?? 'Staff',
+      'actor_role': _currentUser?.roleString ?? 'Staff',
+    });
+
+    try {
+      await _supabase.from('notifications').insert({
+        'recipient_role': 'principal',
+        'title': 'Case #$repId Escalated to OSD & Principal',
+        'message': 'Case escalated by ${_currentUser?.name}. Reason: $reason',
+        'report_id': repId,
+      });
+    } catch (_) {}
+
+    await syncData();
+  }
+
+  // STAGE 3 -> RESOLVED: OSD & Principal resolve case
+  Future<void> resolveCaseOsdAndPrincipal({
+    required String reportId,
+    required String disciplineAction,
+    required String notes,
+  }) async {
+    final repId = int.parse(reportId);
+    const newStatus = 'Resolved';
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        disciplineAction: disciplineAction,
+        disciplineNotes: notes,
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Stage 3 Completed: Case Resolved by OSD and Principal',
+        description: 'OSD and Principal joint intervention finalized decision. Disciplinary Action / Sanction: $disciplineAction. Official Findings & Notes: $notes',
+        actorName: _currentUser?.name ?? 'Staff',
+        actorRole: _currentUser?.roleString ?? 'Staff',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'discipline_action': disciplineAction,
+        'discipline_notes': notes,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {}
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': repId,
+      'title': 'Stage 3 Completed: Case Resolved by OSD and Principal',
+      'description': 'OSD and Principal joint intervention finalized decision. Disciplinary Action / Sanction: $disciplineAction. Official Findings & Notes: $notes',
+      'actor_name': _currentUser?.name ?? 'Staff',
+      'actor_role': _currentUser?.roleString ?? 'Staff',
+    });
+
+    await syncData();
+  }
+
+  // STAGE 3 -> STAGE 4: OSD & Principal escalate to Board of Discipline
+  Future<void> escalateToBoardOfDiscipline({
+    required String reportId,
+    required String reason,
+    String? notes,
+  }) async {
+    final repId = int.parse(reportId);
+    const newStatus = 'Escalated to Board of Discipline';
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        escalationReason: reason,
+        escalationNotes: notes,
+        escalatedTo: 'Board of Discipline',
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Stage 3 Escalation: Escalated to Board of Discipline',
+        description: 'OSD and Principal determined case warrants formal Board proceedings. Reason: $reason.${notes != null && notes.isNotEmpty ? " Notes: $notes" : ""}',
+        actorName: _currentUser?.name ?? 'Staff',
+        actorRole: _currentUser?.roleString ?? 'Staff',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'escalation_reason': reason,
+        'escalation_notes': notes,
+        'escalated_to': 'Board of Discipline',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {
+      await _supabase.from('reports').update({'status': newStatus}).eq('id', repId);
+    }
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': repId,
+      'title': 'Stage 3 Escalation: Escalated to Board of Discipline',
+      'description': 'OSD and Principal determined case warrants formal Board proceedings. Reason: $reason.${notes != null && notes.isNotEmpty ? " Notes: $notes" : ""}',
+      'actor_name': _currentUser?.name ?? 'Staff',
+      'actor_role': _currentUser?.roleString ?? 'Staff',
+    });
+
+    try {
+      await _supabase.from('notifications').insert({
+        'recipient_role': 'board_of_discipline',
+        'title': 'Case #$repId Escalated to Board of Discipline',
+        'message': 'Case escalated to Board of Discipline by ${_currentUser?.name}. Reason: $reason',
+        'report_id': repId,
+      });
+    } catch (_) {}
+
+    await syncData();
+  }
+
+  // STAGE 4 -> STAGE 5: Board of Discipline Final Deliberation & Punishment -> Forward to School President
+  Future<void> finalizeBoardDecisionAndForwardToPresident({
+    required String reportId,
+    required String findings,
+    required String decision,
+    required String punishment,
+  }) async {
+    final repId = int.parse(reportId);
+    const newStatus = 'Forwarded to School President';
+
+    final combinedNotes = 'Board Findings: $findings\nDecision: $decision\nPunishment: $punishment';
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        disciplineAction: punishment,
+        disciplineNotes: combinedNotes,
+        boardFindings: findings,
+        boardDecision: decision,
+        punishmentImposed: punishment,
+        escalatedTo: 'School President',
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Stage 4 Completed: Board Deliberation Finalized & Punishment Imposed',
+        description: 'Board of Discipline finalized disciplinary decision and imposed punishment ($punishment). Case forwarded to School President for final executive review.\nFindings: $findings\nDecision: $decision',
+        actorName: _currentUser?.name ?? 'Board Chairman',
+        actorRole: 'Board of Discipline',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'discipline_action': punishment,
+        'discipline_notes': combinedNotes,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {
+      await _supabase.from('reports').update({'status': newStatus}).eq('id', repId);
+    }
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': repId,
+      'title': 'Stage 4 Completed: Board Deliberation Finalized & Punishment Imposed',
+      'description': 'Board of Discipline finalized disciplinary decision and imposed punishment ($punishment). Case forwarded to School President for final executive review.\nFindings: $findings\nDecision: $decision',
+      'actor_name': _currentUser?.name ?? 'Board Chairman',
+      'actor_role': 'Board of Discipline',
+    });
+
+    try {
+      await _supabase.from('notifications').insert({
+        'recipient_role': 'school_president',
+        'title': 'Case #$repId Forwarded for Final Review',
+        'message': 'Board of Discipline determined punishment for Case #$repId. Awaiting School President final review.',
+        'report_id': repId,
+      });
+    } catch (_) {}
+
+    await syncData();
+  }
+
+  // STAGE 5: School President Final Review & Finalization
+  Future<void> completePresidentReview({
+    required String reportId,
+    required String remarks,
+  }) async {
+    final repId = int.parse(reportId);
+    const newStatus = 'Finalized by School President';
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        presidentNotes: remarks,
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Stage 5 Completed: Final Review Completed by School President',
+        description: 'School President conducted final executive review of completed disciplinary proceedings and affirmed case disposition. Executive Remarks: $remarks',
+        actorName: _currentUser?.name ?? 'School President',
+        actorRole: 'School President',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {}
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': repId,
+      'title': 'Stage 5 Completed: Final Review Completed by School President',
+      'description': 'School President conducted final executive review of completed disciplinary proceedings and affirmed case disposition. Executive Remarks: $remarks',
+      'actor_name': _currentUser?.name ?? 'School President',
+      'actor_role': 'School President',
+    });
+
+    await syncData();
+  }
+
+  // --- COMPATIBILITY WRAPPERS ---
+
+  Future<void> escalateReport({
+    required String reportId,
+    required String reason,
+    String? notes,
+  }) async {
+    final repId = int.parse(reportId);
+    String targetAuthority = 'Principal';
+    String newStatus = 'Escalated to Principal';
+
+    if (_currentUser?.role == UserRole.principal) {
+      targetAuthority = 'Ministrong Tagasubaybay';
+      newStatus = 'Escalated to Ministrong Tagasubaybay';
+    } else if (_currentUser?.role == UserRole.ministrong_tagasubaybay) {
+      targetAuthority = 'OSD';
+      newStatus = 'Escalated to OSD';
+    }
+
+    final idx = _reports.indexWhere((r) => r.id == reportId);
+    if (idx != -1) {
+      _reports[idx] = _reports[idx].copyWith(
+        status: newStatus,
+        escalationReason: reason,
+        escalationNotes: notes,
+        escalatedTo: targetAuthority,
+      );
+      notifyListeners();
+    }
+
+    _timelines.insert(
+      0,
+      TimelineEvent(
+        id: 'tl_${DateTime.now().millisecondsSinceEpoch}',
+        reportId: reportId,
+        title: 'Case Escalated to $targetAuthority',
+        description: notes != null && notes.isNotEmpty
+            ? 'Reason: $reason. Notes: $notes'
+            : 'Reason: $reason',
+        actorName: _currentUser?.name ?? 'Staff',
+        actorRole: _currentUser?.roleString ?? 'Staff',
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+
+    try {
+      await _supabase.from('reports').update({
+        'status': newStatus,
+        'escalation_reason': reason,
+        'escalation_notes': notes,
+        'escalated_to': targetAuthority,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', repId);
+    } catch (_) {
+      await _supabase.from('reports').update({'status': newStatus}).eq('id', repId);
+    }
+
+    await _supabase.from('timeline_events').insert({
+      'report_id': repId,
+      'title': 'Case Escalated to $targetAuthority',
+      'description': notes != null && notes.isNotEmpty
+          ? 'Reason: $reason. Notes: $notes'
+          : 'Reason: $reason',
+      'actor_name': _currentUser?.name ?? 'Staff',
+      'actor_role': _currentUser?.roleString ?? 'Staff',
+    });
+
+    try {
+      await _supabase.from('notifications').insert({
+        'recipient_role': targetAuthority.toLowerCase().contains('ministro')
+            ? 'ministrong_tagasubaybay'
+            : (targetAuthority.toLowerCase().contains('osd') ? 'osd' : 'principal'),
+        'title': 'Case Escalation: Case #$repId',
+        'message': 'Case escalated to $targetAuthority by ${_currentUser?.name}. Reason: $reason',
+        'report_id': repId,
+      });
+    } catch (_) {}
+
     await syncData();
   }
 
