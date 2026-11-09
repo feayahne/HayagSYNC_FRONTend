@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/database_service.dart';
 import '../../services/ai_service.dart';
@@ -38,6 +39,7 @@ class _AdviserSubmitReportScreenState extends State<AdviserSubmitReportScreen> {
 
   String? _evidenceFileName;
   String? _evidenceFilePath;
+  Uint8List? _evidenceBytes;
   bool _isAnalyzingEvidence = false;
   PhotoVerificationResult? _aiVerificationResult;
   bool _isSubmitting = false;
@@ -225,13 +227,15 @@ class _AdviserSubmitReportScreenState extends State<AdviserSubmitReportScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'mp4'],
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         setState(() {
           _evidenceFileName = file.name;
-          _evidenceFilePath = file.path;
+          _evidenceFilePath = kIsWeb ? null : file.path;
+          _evidenceBytes = file.bytes;
           _isAnalyzingEvidence = true;
           _aiVerificationResult = null;
         });
