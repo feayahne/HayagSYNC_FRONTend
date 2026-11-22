@@ -259,7 +259,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
                         
                         // Pick and verify a new certificate
                         try {
-                          final result = await FilePicker.platform.pickFiles(type: FileType.any);
+                          final result = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
                           if (result != null && result.files.isNotEmpty) {
                             final file = result.files.first;
                             final name = file.name;
