@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../services/database_service.dart';
@@ -230,7 +231,7 @@ class _EvidenceMediaWidgetState extends State<EvidenceMediaWidget> {
 
   Widget _buildImageViewer(int index) {
     final filename = _mediaFiles[index];
-    final isLocalFile = (filename.contains('/') || filename.contains('\\')) && 
+    final isLocalFile = !kIsWeb && (filename.contains('/') || filename.contains('\\')) && 
                         !filename.startsWith('uploads/') && 
                         !filename.startsWith('http');
                         
