@@ -40,7 +40,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _pickCertificateFromDevice() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.any);
+      final result = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         final name = file.name;
