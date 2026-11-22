@@ -325,6 +325,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.media,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -828,7 +829,7 @@ class _SubmitReportScreenState extends State<SubmitReportScreen> {
                               } else {
                                 if (kIsWeb && media.file.bytes != null) {
                                   previewWidget = Image.memory(media.file.bytes!, fit: BoxFit.cover);
-                                } else if (media.file.path != null) {
+                                } else if (!kIsWeb && media.file.path != null) {
                                   previewWidget = Image.file(File(media.file.path!), fit: BoxFit.cover);
                                 } else {
                                   previewWidget = Container(
