@@ -320,68 +320,47 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                             ),
 
-                            const SizedBox(height: 24),
-                            const Divider(color: Color(0xFFE2E8F0)),
+                            const SizedBox(height: 20),
+                            const Row(
+                              children: [
+                                Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 12),
+                                  child: Text('OR', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                                Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                              ],
+                            ),
                             const SizedBox(height: 16),
 
-                            // Anonymous Reporting (No Account Required)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF0FDF4),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                            // Anonymous Report Action Button
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const AnonymousReportScreen()),
+                                );
+                              },
+                              icon: const Icon(Icons.visibility_off_outlined, size: 20, color: Color(0xFF0F172A)),
+                              label: const Text(
+                                'Report Anonymously',
+                                style: TextStyle(
+                                  color: Color(0xFF0F172A),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
                               ),
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: const [
-                                      Icon(Icons.shield_outlined, color: Color(0xFF16A34A), size: 18),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Need to report anonymously?',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                            color: Color(0xFF166534),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Anyone can submit an incident report without creating an account or logging in.',
-                                    style: TextStyle(fontSize: 12, color: Color(0xFF15803D)),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton.icon(
-                                      onPressed: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(builder: (_) => const AnonymousReportScreen()),
-                                        );
-                                      },
-                                      icon: const Icon(Icons.send_rounded, size: 16),
-                                      label: const Text(
-                                        'Submit Anonymous Report',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF166534),
-                                        backgroundColor: Colors.white,
-                                        side: const BorderSide(color: Color(0xFF16A34A)),
-                                        padding: const EdgeInsets.symmetric(vertical: 10),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                backgroundColor: const Color(0xFFF8FAFC),
                               ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Identity protected under RA 10173 • No login required',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
                             ),
                           ],
                         ),
